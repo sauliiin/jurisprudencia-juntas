@@ -1,0 +1,40 @@
+# Credenciais locais
+credentials.json
+token.json
+.env
+.env.*
+
+# Artefatos gerados pelo pipeline
+votos_relatores_pdfs/
+pdfs_por_lei_e_ato/
+votos_brutos/
+assuntos.csv
+indice_busca.db
+indice_busca.db-*
+site_data/arquivos_sem_link_publico.txt
+*.pid
+pipeline*_cache.db
+pipeline*_cache.db-*
+
+# Logs e temporarios de execucao
+*.log
+log_*.txt
+nohup.out
+*.part
+.lo_*/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+env/
+
+# Sistema/editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

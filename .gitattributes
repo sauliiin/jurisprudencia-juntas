@@ -1,2 +1,4 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+site_data/votos.jsonl text eol=lf -diff
+marco_atualizacao.json text eol=lf
