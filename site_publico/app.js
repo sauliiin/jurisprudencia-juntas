@@ -29,6 +29,10 @@ const els = {
   resultCount: document.querySelector("#result-count"),
   results: document.querySelector("#results"),
   loadMore: document.querySelector("#load-more"),
+  paginationBar: document.querySelector("#pagination-bar"),
+  pagePrev: document.querySelector("#page-prev"),
+  pageNext: document.querySelector("#page-next"),
+  pageInfo: document.querySelector("#page-info"),
   empty: document.querySelector("#empty-state"),
   detailPane: document.querySelector(".detail-pane"),
   detail: document.querySelector("#detail"),
@@ -264,7 +268,7 @@ async function init() {
   await runSearch();
 }
 
-function searchUrl() {
+function searchUrl(fetchOffset) {
   const params = new URLSearchParams({
     q: state.query,
     instancia: state.instancia,
@@ -272,20 +276,27 @@ function searchUrl() {
     mes: state.month,
     ano: state.year,
     limit: String(state.limit),
-    offset: String(state.offset),
+    offset: String(fetchOffset),
   });
   return `/api/search?${params.toString()}`;
 }
 
-async function runSearch({ append = false } = {}) {
-  if (!append) {
+async function runSearch({ append = false, keepOffset = false } = {}) {
+  if (!append && !keepOffset) {
     state.offset = 0;
+  }
+  if (!append) {
     state.items = [];
     els.results.innerHTML = '<div class="loading">Buscando...</div>';
   }
 
+  let fetchOffset = state.offset;
+  if (append) {
+    fetchOffset = state.offset + state.items.length;
+  }
+
   if (state.mode === "api") {
-    const data = await fetchJson(searchUrl());
+    const data = await fetchJson(searchUrl(fetchOffset));
     state.total = data.total;
     state.items = append ? [...state.items, ...data.items.map(decorate)] : data.items.map(decorate);
   } else {
@@ -296,13 +307,16 @@ async function runSearch({ append = false } = {}) {
       .filter((record) => state.instancia === "todas" || record.instancia === state.instancia)
       .map((record) => ({ record, score: scoreRecord(record, terms, phrase) }))
       .filter((entry) => entry.score > 0)
-      .sort((a, b) => b.score - a.score || a.record.nome_arquivo.localeCompare(b.record.nome_arquivo, "pt-BR"))
-      .map((entry) => ({
-        ...entry.record,
-        trecho: makeSnippet(entry.record, terms, phrase),
-      }));
+      .sort((a, b) => b.score - a.score || a.record.nome_arquivo.localeCompare(b.record.nome_arquivo, "pt-BR"));
+      
     state.total = filtered.length;
-    state.items = filtered.slice(0, state.offset + state.limit);
+    
+    const pageItems = filtered.slice(fetchOffset, fetchOffset + state.limit).map((entry) => ({
+      ...entry.record,
+      trecho: makeSnippet(entry.record, terms, phrase),
+    }));
+
+    state.items = append ? [...state.items, ...pageItems] : pageItems;
   }
 
   renderResults();
@@ -311,7 +325,27 @@ async function runSearch({ append = false } = {}) {
 function renderResults() {
   const shown = state.items.length;
   els.resultCount.textContent = `${shown.toLocaleString("pt-BR")} de ${state.total.toLocaleString("pt-BR")} resultados`;
-  els.loadMore.hidden = shown >= state.total;
+  
+  const endOfShown = state.offset + shown;
+  els.loadMore.hidden = endOfShown >= state.total;
+
+  if (state.total > state.limit) {
+    els.paginationBar.hidden = false;
+    const startPage = Math.floor(state.offset / state.limit) + 1;
+    const endPage = Math.floor((state.offset + shown - 1) / state.limit) + 1;
+    const totalPages = Math.ceil(state.total / state.limit);
+    
+    if (startPage === endPage) {
+      els.pageInfo.textContent = `Página ${startPage} de ${totalPages}`;
+    } else {
+      els.pageInfo.textContent = `Páginas ${startPage}-${endPage} de ${totalPages}`;
+    }
+
+    els.pagePrev.disabled = state.offset === 0;
+    els.pageNext.disabled = endOfShown >= state.total;
+  } else {
+    if (els.paginationBar) els.paginationBar.hidden = true;
+  }
 
   if (!shown) {
     els.results.innerHTML = '<div class="empty-list">Nenhum resultado</div>';
@@ -487,8 +521,17 @@ els.results.addEventListener("click", (event) => {
 });
 
 els.loadMore.addEventListener("click", () => {
-  state.offset = state.items.length;
   runSearch({ append: true });
+});
+
+els.pageNext.addEventListener("click", () => {
+  state.offset = state.offset + state.items.length;
+  runSearch({ append: false, keepOffset: true });
+});
+
+els.pagePrev.addEventListener("click", () => {
+  state.offset = Math.max(0, state.offset - state.limit);
+  runSearch({ append: false, keepOffset: true });
 });
 
 els.showText.addEventListener("click", () => {

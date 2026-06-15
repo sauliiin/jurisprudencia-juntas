@@ -488,6 +488,62 @@ select {
   color: var(--danger);
 }
 
+/* Pagination & Neon Button */
+.btn-neon {
+  padding: 8px 16px;
+  background: transparent;
+  cursor: pointer;
+  border: 1px solid var(--accent-neon);
+  color: var(--accent-neon);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  box-shadow: 0 0 5px rgba(255, 251, 0, 0.2), inset 0 0 5px rgba(255, 251, 0, 0.1);
+  text-shadow: 0 0 5px rgba(255, 251, 0, 0.5);
+  transition: all 0.2s ease;
+  border-radius: 0;
+}
+
+.btn-neon:hover:not(:disabled) {
+  background: rgba(255, 251, 0, 0.15);
+  box-shadow: 0 0 15px rgba(255, 251, 0, 0.4), inset 0 0 10px rgba(255, 251, 0, 0.2);
+  text-shadow: 0 0 10px rgba(255, 251, 0, 0.8);
+}
+
+.btn-neon:disabled {
+  border-color: var(--line);
+  color: var(--muted);
+  box-shadow: none;
+  text-shadow: none;
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.pagination-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 16px;
+  border-top: 1px solid var(--line);
+  background: rgba(8, 12, 18, 0.96);
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+}
+
+.pagination-bar[hidden] {
+  display: none !important;
+}
+
+#page-info {
+  color: var(--accent);
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  font-size: 13px;
+}
+
 @media (max-width: 900px) {
   .topbar,
   .workspace {

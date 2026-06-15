@@ -55,9 +55,14 @@
         <aside class="results-pane">
           <div class="results-meta">
             <span id="result-count">0 resultados</span>
-            <button id="load-more" class="subtle" type="button" hidden>Mais</button>
+            <button id="load-more" class="btn-neon" type="button" hidden>Mais</button>
           </div>
           <div id="results" class="results-list" aria-live="polite"></div>
+          <div id="pagination-bar" class="pagination-bar" hidden>
+            <button id="page-prev" class="btn-neon" type="button" disabled>Anterior</button>
+            <span id="page-info">Página 1</span>
+            <button id="page-next" class="btn-neon" type="button">Próxima</button>
+          </div>
         </aside>
 
         <section class="detail-pane">
