@@ -498,6 +498,17 @@ select {
   letter-spacing: 0.5px;
   font-size: 14px;
   font-family: "Courier New", Courier, monospace;
+  transition: all 0.2s ease;
+}
+
+.auto-link {
+  text-decoration: none;
+}
+
+.auto-link:hover strong {
+  text-shadow: 0 0 10px var(--accent-neon);
+  text-decoration: underline;
+  text-underline-offset: 4px;
 }
 
 .auto-fields {

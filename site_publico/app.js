@@ -411,10 +411,23 @@ function renderAutos(autos = []) {
   if (!autos.length) return '<div class="auto-row"><strong>Sem autos no assunto</strong></div>';
   return autos
     .map(
-      (auto) => `
+      (auto) => {
+        let numeroHtml = `<strong>${escapeHtml(auto.numero)}</strong>`;
+        if (auto.numero) {
+          const clean = String(auto.numero).replace(/[^a-z0-9]/gi, "");
+          const match = clean.match(/^(\d+)([a-z]*)$/i);
+          if (match) {
+            const idn = encodeURIComponent(match[1]);
+            const tip = encodeURIComponent((match[2] || "").toUpperCase());
+            const sifUrl = `https://sif-piloto.pbh.gov.br/MostraAuto.php?s_Tip_Auto=&s_Idn_Doct_Lavr=${idn}&s_Dat_Lavr=&s_Dat_Lavr2=&s_Dat_Fina=&s_Nom_Raza_Soci=&s_Nom_Fant=&s_Num_Cpf_CGC=&Idn_Equp=&Fiscal=&s_Idn_Cmpo_Lei=&s_Tip_Logr=&s_Nom_Logr=&s_Num_Imov_Logr=&s_Nom_Bair=&s_Num_CEP=&s_Tip_Loca=&s_Nom_Loca=&s_Num_Imov_Loca=&s_Nom_Bair_Loca=&s_Num_CEP_Loca=&s_Tip_Cienc=&s_Sit_Regt=A&Idn_Doct_Lavr=${idn}&Tip_Auto=${tip}`;
+            numeroHtml = `<a href="${sifUrl}" target="_blank" rel="noreferrer" class="auto-link"><strong>${escapeHtml(auto.numero)}</strong></a>`;
+          }
+        }
+
+        return `
       <section class="auto-row">
         <div>
-          <strong>${escapeHtml(auto.numero)}</strong>
+          ${numeroHtml}
           <span class="badge">${auto.pdf_encontrado ? "SIF" : "sem PDF"}</span>
         </div>
         <div class="auto-fields">
@@ -424,7 +437,8 @@ function renderAutos(autos = []) {
           <div><span>Local</span> ${escapeHtml(auto.local_constatacao || "—")}</div>
         </div>
       </section>
-    `
+    `;
+      }
     )
     .join("");
 }
