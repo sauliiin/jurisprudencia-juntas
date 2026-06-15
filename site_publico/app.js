@@ -8,7 +8,7 @@ const state = {
   month: "",
   year: "",
   offset: 0,
-  limit: 40,
+  limit: 50,
   total: 0,
   items: [],
   records: [],
@@ -28,7 +28,6 @@ const els = {
   year: document.querySelector("#year-filter"),
   resultCount: document.querySelector("#result-count"),
   results: document.querySelector("#results"),
-  loadMore: document.querySelector("#load-more"),
   paginationBar: document.querySelector("#pagination-bar"),
   pagePrev: document.querySelector("#page-prev"),
   pageNext: document.querySelector("#page-next"),
@@ -324,10 +323,8 @@ async function runSearch({ append = false, keepOffset = false } = {}) {
 
 function renderResults() {
   const shown = state.items.length;
-  els.resultCount.textContent = `${shown.toLocaleString("pt-BR")} de ${state.total.toLocaleString("pt-BR")} resultados`;
-  
   const endOfShown = state.offset + shown;
-  els.loadMore.hidden = endOfShown >= state.total;
+  els.resultCount.textContent = `${endOfShown.toLocaleString("pt-BR")} de ${state.total.toLocaleString("pt-BR")} resultados`;
 
   if (state.total > state.limit) {
     els.paginationBar.hidden = false;
@@ -518,10 +515,6 @@ els.results.addEventListener("click", (event) => {
   const button = event.target.closest("[data-file-id]");
   if (!button) return;
   selectVoto(button.dataset.fileId);
-});
-
-els.loadMore.addEventListener("click", () => {
-  runSearch({ append: true });
 });
 
 els.pageNext.addEventListener("click", () => {

@@ -133,7 +133,7 @@ class SiteHandler(SimpleHTTPRequestHandler):
         mode = (params.get("modo") or ["phrase"])[0]
         mes = (params.get("mes") or [""])[0].strip()
         ano = (params.get("ano") or [""])[0].strip()
-        limit = min(max(int((params.get("limit") or ["40"])[0]), 1), MAX_LIMIT)
+        limit = min(max(int((params.get("limit") or ["50"])[0]), 1), MAX_LIMIT)
         offset = max(int((params.get("offset") or ["0"])[0]), 0)
 
         where_instancia = ""
