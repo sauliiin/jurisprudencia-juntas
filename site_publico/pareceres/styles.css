@@ -1,0 +1,22 @@
+/* Ajustes específicos do site de Pareceres.
+   O tema base é herdado de ../styles.css (mesmo visual das Decisões). */
+
+/* A busca tem 4 campos: texto, categoria, modo e botão. */
+.searchbar {
+  grid-template-columns: 1fr 200px 150px 92px;
+}
+
+/* O chip de pasta pode conter o caminho completo da subpasta. */
+.result-autos .chip {
+  white-space: normal;
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+@media (max-width: 900px) {
+  .searchbar {
+    grid-template-columns: 1fr;
+  }
+}

@@ -32,7 +32,7 @@ body {
     radial-gradient(circle at 90% 80%, rgba(255, 251, 0, 0.05), transparent 40%),
     linear-gradient(rgba(0, 240, 255, 0.03) 1px, transparent 1px) 0 0 / 40px 40px,
     linear-gradient(90deg, rgba(255, 0, 85, 0.03) 1px, transparent 1px) 0 0 / 40px 40px,
-  background-attachment: fixed;
+    background-attachment: fixed;
 }
 
 /* Custom Scrollbars */
@@ -40,14 +40,17 @@ body {
   width: 10px;
   height: 10px;
 }
+
 ::-webkit-scrollbar-track {
   background: rgba(5, 7, 10, 0.9);
   border-left: 1px solid var(--line);
 }
+
 ::-webkit-scrollbar-thumb {
   background: var(--line);
   border: 1px solid rgba(0, 240, 255, 0.2);
 }
+
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(0, 240, 255, 0.3);
   border-color: var(--accent);
@@ -105,6 +108,9 @@ select {
   grid-template-columns: 1fr 140px 150px 120px 96px 92px;
   gap: 8px;
   min-width: 0;
+  /* Ocupa a largura inteira do topbar (o nav fica na linha de cima, à direita),
+     senão o formulário cai na coluna estreita da marca e o input colapsa. */
+  grid-column: 1 / -1;
 }
 
 .searchbar input,
@@ -169,6 +175,73 @@ select {
   background: linear-gradient(135deg, #0088ff 0%, var(--accent) 100%);
   filter: brightness(1.2);
   box-shadow: 0 0 25px rgba(0, 240, 255, 0.7);
+}
+
+/* Mode Switch Buttons */
+.btn-nav-pareceres,
+.btn-nav-decisoes {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 24px;
+  color: #fff;
+  font-family: "Courier New", Courier, monospace;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+  text-shadow: 0 0 5px rgba(255, 255, 255, 0.5);
+}
+
+/* PARECERES (Blue) */
+.btn-nav-pareceres {
+  background: linear-gradient(135deg, rgba(0, 240, 255, 0.1) 0%, rgba(0, 136, 255, 0.1) 100%);
+  border: 1px solid var(--accent);
+  border-right: 3px solid #0088ff;
+  border-left: 3px solid var(--accent);
+  box-shadow: 0 0 10px rgba(0, 240, 255, 0.3);
+  animation: pulse-blue 2s infinite alternate;
+}
+
+@keyframes pulse-blue {
+  0% { box-shadow: 0 0 10px rgba(0, 240, 255, 0.2); }
+  100% { box-shadow: 0 0 20px rgba(0, 240, 255, 0.6); }
+}
+
+.btn-nav-pareceres:hover {
+  background: linear-gradient(135deg, var(--accent) 0%, #0088ff 100%);
+  color: #000;
+  text-shadow: none;
+  box-shadow: 0 0 25px rgba(0, 240, 255, 0.8);
+  transform: translateY(-2px);
+}
+
+/* DECISÕES (Yellow) */
+.btn-nav-decisoes {
+  background: linear-gradient(135deg, rgba(255, 251, 0, 0.1) 0%, rgba(255, 170, 0, 0.1) 100%);
+  border: 1px solid var(--accent-neon);
+  border-right: 3px solid #ffaa00;
+  border-left: 3px solid var(--accent-neon);
+  box-shadow: 0 0 10px rgba(255, 251, 0, 0.3);
+  animation: pulse-yellow 2s infinite alternate;
+}
+
+@keyframes pulse-yellow {
+  0% { box-shadow: 0 0 10px rgba(255, 251, 0, 0.2); }
+  100% { box-shadow: 0 0 20px rgba(255, 251, 0, 0.6); }
+}
+
+.btn-nav-decisoes:hover {
+  background: linear-gradient(135deg, var(--accent-neon) 0%, #ffaa00 100%);
+  color: #000;
+  text-shadow: none;
+  box-shadow: 0 0 25px rgba(255, 251, 0, 0.8);
+  transform: translateY(-2px);
 }
 
 .searchbar button {
@@ -287,16 +360,40 @@ select {
 }
 
 @keyframes slideUpFade {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
-.result:nth-child(1) { animation-delay: 0.05s; }
-.result:nth-child(2) { animation-delay: 0.10s; }
-.result:nth-child(3) { animation-delay: 0.15s; }
-.result:nth-child(4) { animation-delay: 0.20s; }
-.result:nth-child(5) { animation-delay: 0.25s; }
-.result:nth-child(n+6) { animation-delay: 0.30s; }
+.result:nth-child(1) {
+  animation-delay: 0.05s;
+}
+
+.result:nth-child(2) {
+  animation-delay: 0.10s;
+}
+
+.result:nth-child(3) {
+  animation-delay: 0.15s;
+}
+
+.result:nth-child(4) {
+  animation-delay: 0.20s;
+}
+
+.result:nth-child(5) {
+  animation-delay: 0.25s;
+}
+
+.result:nth-child(n+6) {
+  animation-delay: 0.30s;
+}
 
 .result:hover,
 .result.active {
@@ -395,9 +492,20 @@ select {
 }
 
 @keyframes pulseGlow {
-  0% { box-shadow: 0 0 15px rgba(255, 251, 0, 0.1); border-left-color: rgba(255, 251, 0, 0.5); }
-  50% { box-shadow: 0 0 25px rgba(255, 251, 0, 0.4); border-left-color: var(--accent-neon); }
-  100% { box-shadow: 0 0 15px rgba(255, 251, 0, 0.1); border-left-color: rgba(255, 251, 0, 0.5); }
+  0% {
+    box-shadow: 0 0 15px rgba(255, 251, 0, 0.1);
+    border-left-color: rgba(255, 251, 0, 0.5);
+  }
+
+  50% {
+    box-shadow: 0 0 25px rgba(255, 251, 0, 0.4);
+    border-left-color: var(--accent-neon);
+  }
+
+  100% {
+    box-shadow: 0 0 15px rgba(255, 251, 0, 0.1);
+    border-left-color: rgba(255, 251, 0, 0.5);
+  }
 }
 
 .empty-state.is-hidden {
@@ -634,6 +742,7 @@ select {
 }
 
 @media (max-width: 900px) {
+
   .topbar,
   .workspace {
     grid-template-columns: 1fr;

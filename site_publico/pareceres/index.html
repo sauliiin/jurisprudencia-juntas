@@ -4,7 +4,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Busca de Decisões</title>
+  <title>Busca de Pareceres</title>
+  <link rel="stylesheet" href="../styles.css" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 
@@ -12,41 +13,21 @@
   <main class="app-shell">
     <header class="topbar">
       <div class="brand">
-        <strong>Busca de Decisões</strong>
+        <strong>Busca de Pareceres</strong>
         <span id="stats">Carregando acervo</span>
       </div>
       <nav style="display: flex; margin-left: auto;">
-        <a href="pareceres/" class="btn-nav-pareceres">MODO PARECERES</a>
+        <a href="../" class="btn-nav-decisoes">MODO DECISÕES</a>
       </nav>
       <form id="search-form" class="searchbar">
         <input id="search-input" type="search" autocomplete="off"
-          placeholder="Buscar por texto, auto, autuado, infração, local ou lei" />
-        <select id="instance-filter" aria-label="Instância">
-          <option value="todas">Todas</option>
-          <option value="1a_instancia">1ª instância</option>
-          <option value="2a_instancia">2ª instância</option>
+          placeholder="Buscar por texto, título, assunto, lei ou pasta" />
+        <select id="category-filter" aria-label="Categoria">
+          <option value="todas">Todas as pastas</option>
         </select>
         <select id="search-mode" aria-label="Modo de busca">
           <option value="phrase">Expressão</option>
           <option value="any">Qualquer palavra</option>
-        </select>
-        <select id="month-filter" aria-label="Mês">
-          <option value="">Mês</option>
-          <option value="janeiro">Janeiro</option>
-          <option value="fevereiro">Fevereiro</option>
-          <option value="março">Março</option>
-          <option value="abril">Abril</option>
-          <option value="maio">Maio</option>
-          <option value="junho">Junho</option>
-          <option value="julho">Julho</option>
-          <option value="agosto">Agosto</option>
-          <option value="setembro">Setembro</option>
-          <option value="outubro">Outubro</option>
-          <option value="novembro">Novembro</option>
-          <option value="dezembro">Dezembro</option>
-        </select>
-        <select id="year-filter" aria-label="Ano">
-          <option value="">Ano</option>
         </select>
         <button type="submit">Buscar</button>
       </form>
@@ -67,21 +48,19 @@
 
       <section class="detail-pane">
         <div id="empty-state" class="empty-state">
-          <strong>Selecione uma decisão</strong>
+          <strong>Selecione um parecer</strong>
           <span>A prévia aparecerá aqui.</span>
         </div>
 
         <article id="detail" class="detail" hidden>
           <div class="detail-head">
             <div>
-              <span id="detail-instance" class="badge"></span>
+              <span id="detail-category" class="badge"></span>
               <h1 id="detail-title"></h1>
               <p id="detail-subtitle"></p>
             </div>
             <a id="open-file" class="open-button" target="_blank" rel="noreferrer">Abrir inteiro</a>
           </div>
-
-          <div id="autos" class="autos"></div>
 
           <div class="preview-toolbar">
             <span id="preview-label"></span>

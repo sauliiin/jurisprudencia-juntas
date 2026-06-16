@@ -8,6 +8,7 @@ token.json
 votos_relatores_pdfs/
 pdfs_por_lei_e_ato/
 votos_brutos/
+pareceres_brutos/
 assuntos.csv
 indice_busca.db
 indice_busca.db-*
@@ -22,6 +23,7 @@ log_*.txt
 nohup.out
 *.part
 .lo_*/
+.ocr_*/
 
 # Python
 __pycache__/
@@ -38,3 +40,6 @@ env/
 Thumbs.db
 .idea/
 .vscode/
+
+# Lixo do gerenciador de arquivos (KDE)
+.directory
