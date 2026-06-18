@@ -179,7 +179,8 @@ select {
 
 /* Mode Switch Buttons */
 .btn-nav-pareceres,
-.btn-nav-decisoes {
+.btn-nav-decisoes,
+.btn-nav-drive {
   position: relative;
   display: inline-flex;
   align-items: center;
@@ -200,7 +201,9 @@ select {
 
 /* PARECERES (Blue) */
 .btn-nav-pareceres {
-  background: linear-gradient(135deg, rgba(0, 240, 255, 0.1) 0%, rgba(0, 136, 255, 0.1) 100%);
+  background: linear-gradient(135deg, var(--accent) 0%, #0088ff 100%);
+  color: #000;
+  text-shadow: none;
   border: 1px solid var(--accent);
   border-right: 3px solid #0088ff;
   border-left: 3px solid var(--accent);
@@ -214,16 +217,16 @@ select {
 }
 
 .btn-nav-pareceres:hover {
-  background: linear-gradient(135deg, var(--accent) 0%, #0088ff 100%);
-  color: #000;
-  text-shadow: none;
+  filter: brightness(1.15);
   box-shadow: 0 0 25px rgba(0, 240, 255, 0.8);
   transform: translateY(-2px);
 }
 
 /* DECISÕES (Yellow) */
 .btn-nav-decisoes {
-  background: linear-gradient(135deg, rgba(255, 251, 0, 0.1) 0%, rgba(255, 170, 0, 0.1) 100%);
+  background: linear-gradient(135deg, var(--accent-neon) 0%, #ffaa00 100%);
+  color: #000;
+  text-shadow: none;
   border: 1px solid var(--accent-neon);
   border-right: 3px solid #ffaa00;
   border-left: 3px solid var(--accent-neon);
@@ -237,10 +240,31 @@ select {
 }
 
 .btn-nav-decisoes:hover {
-  background: linear-gradient(135deg, var(--accent-neon) 0%, #ffaa00 100%);
+  filter: brightness(1.15);
+  box-shadow: 0 0 25px rgba(255, 251, 0, 0.8);
+  transform: translateY(-2px);
+}
+
+/* DRIVE (Green/Cyber) */
+.btn-nav-drive {
+  background: linear-gradient(135deg, rgba(0, 255, 136, 0.1) 0%, rgba(0, 200, 100, 0.1) 100%);
+  border: 1px solid #00ff88;
+  border-right: 3px solid #00cc66;
+  border-left: 3px solid #00ff88;
+  box-shadow: 0 0 10px rgba(0, 255, 136, 0.3);
+  animation: pulse-green 2s infinite alternate;
+}
+
+@keyframes pulse-green {
+  0% { box-shadow: 0 0 10px rgba(0, 255, 136, 0.2); }
+  100% { box-shadow: 0 0 20px rgba(0, 255, 136, 0.6); }
+}
+
+.btn-nav-drive:hover {
+  background: linear-gradient(135deg, #00ff88 0%, #00cc66 100%);
   color: #000;
   text-shadow: none;
-  box-shadow: 0 0 25px rgba(255, 251, 0, 0.8);
+  box-shadow: 0 0 25px rgba(0, 255, 136, 0.8);
   transform: translateY(-2px);
 }
 
