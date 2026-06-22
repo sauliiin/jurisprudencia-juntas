@@ -9,7 +9,7 @@
   --accent: #00f0ff;
   --accent-strong: #ff0055;
   --accent-neon: #fffb00;
-  --mark: rgba(255, 251, 0, 0.3);
+  --mark: #ffeb3b;
   --danger: #ff003c;
   --shadow-cyan: 0 0 15px rgba(0, 240, 255, 0.3);
   --shadow-pink: 0 0 15px rgba(255, 0, 85, 0.3);
@@ -443,10 +443,10 @@ select {
 .result-snippet mark,
 .preview mark {
   background: var(--mark);
-  color: #fff;
+  color: #111;
   padding: 0 2px;
-  text-shadow: 0 0 5px #000;
-  border-bottom: 2px solid var(--accent-neon);
+  text-shadow: none;
+  border-bottom: 2px solid #f5c400;
 }
 
 .result-autos {

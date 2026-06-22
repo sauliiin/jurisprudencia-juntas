@@ -164,7 +164,8 @@ usa o preview público do Google Drive.
 O site permite:
 
 - busca por expressão, que é o padrão;
-- busca por qualquer palavra;
+- busca por palavras, exigindo que todas estejam no documento;
+- destaque amarelo dos termos encontrados na prévia textual;
 - filtro por instância;
 - filtro por mês/ano sem reindexar, usando busca oculta por expressões como
   `maio de 2025`;

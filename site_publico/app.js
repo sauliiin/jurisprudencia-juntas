@@ -163,8 +163,8 @@ function scoreRecord(record, terms, phrase) {
     }
     return score;
   }
+  if (!terms.every((term) => blob.includes(term))) return 0;
   for (const term of terms) {
-    if (!blob.includes(term)) continue;
     if (title.includes(term)) score += 10;
     if (subject.includes(term)) score += 7;
     if (autos.includes(term)) score += 5;
@@ -200,12 +200,65 @@ function fillYearFilter(records) {
 }
 
 function highlight(value, terms) {
-  let html = escapeHtml(value);
-  for (const term of terms.filter((token) => token.length > 1).slice(0, 8)) {
-    const safe = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    html = html.replace(new RegExp(`(${safe})`, "gi"), "<mark>$1</mark>");
+  const source = String(value || "");
+  const needles = [...new Set(terms.map(normalize).filter(Boolean))].sort(
+    (a, b) => b.length - a.length
+  );
+  if (!source || !needles.length) return escapeHtml(source);
+
+  let normalized = "";
+  const starts = [];
+  const ends = [];
+  let offset = 0;
+  for (const character of source) {
+    const start = offset;
+    offset += character.length;
+    const folded = normalize(character);
+    normalized += folded;
+    for (let index = 0; index < folded.length; index += 1) {
+      starts.push(start);
+      ends.push(offset);
+    }
   }
-  return html;
+
+  const ranges = [];
+  for (const needle of needles) {
+    let from = 0;
+    while (from < normalized.length) {
+      const index = normalized.indexOf(needle, from);
+      if (index === -1) break;
+      ranges.push([starts[index], ends[index + needle.length - 1]]);
+      from = index + needle.length;
+    }
+  }
+
+  if (!ranges.length) return escapeHtml(source);
+  ranges.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const merged = [];
+  for (const range of ranges) {
+    const previous = merged.at(-1);
+    if (previous && range[0] <= previous[1]) {
+      previous[1] = Math.max(previous[1], range[1]);
+    } else {
+      merged.push([...range]);
+    }
+  }
+
+  let html = "";
+  let cursor = 0;
+  for (const [start, end] of merged) {
+    html += escapeHtml(source.slice(cursor, start));
+    html += `<mark>${escapeHtml(source.slice(start, end))}</mark>`;
+    cursor = end;
+  }
+  return html + escapeHtml(source.slice(cursor));
+}
+
+function scrollToFirstHighlight() {
+  window.requestAnimationFrame(() => {
+    const firstMatch = els.preview.querySelector("mark");
+    if (firstMatch) firstMatch.scrollIntoView({ block: "center", inline: "nearest" });
+  });
 }
 
 function debounce(fn, wait = 250) {
@@ -466,9 +519,11 @@ function renderPreview() {
   const item = state.selected;
   if (!item) return;
 
+  const terms = tokenize(state.query);
   const isFilePreview = state.previewMode === "file";
   els.showFile.classList.toggle("active", isFilePreview);
   els.showText.classList.toggle("active", !isFilePreview);
+  els.showText.textContent = terms.length ? "Texto com destaques" : "Texto";
   els.showFile.disabled = !item.tem_arquivo_publico;
   els.previewLabel.textContent = `${(item.ext || "arquivo").toUpperCase()} · ${previewKindLabel(item)} · ${autosLabel(item.autos || [])}`;
 
@@ -484,7 +539,11 @@ function renderPreview() {
   } else if (prefersTextPreview(item)) {
     notice = "Prévia textual extraída do Word/texto. Use “Abrir inteiro” para ver o arquivo original no Drive.\n\n";
   }
-  els.preview.innerHTML = `<div class="text-preview">${escapeHtml((notice + text).slice(0, 18000))}</div>`;
+  if (terms.length) {
+    notice += "Termos da busca destacados em amarelo.\n\n";
+  }
+  els.preview.innerHTML = `<div class="text-preview">${escapeHtml(notice)}${highlight(text, terms)}</div>`;
+  scrollToFirstHighlight();
 }
 
 els.form.addEventListener("submit", (event) => {

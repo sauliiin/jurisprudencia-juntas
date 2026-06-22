@@ -46,8 +46,8 @@ def _tokens(query: str) -> list[str]:
 
 def _fts_query(query: str, mode: str = "phrase") -> str:
     tokens = _tokens(query)
-    if mode == "any":
-        return " OR ".join(f"{token}*" for token in tokens)
+    if mode in {"words", "any"}:
+        return " AND ".join(f"{token}*" for token in tokens)
     escaped = query.replace('"', '""')
     return f'"{escaped}"'
 
@@ -239,7 +239,7 @@ class SiteHandler(SimpleHTTPRequestHandler):
             payload = _row_dict(row)
             _with_urls(payload, file_id)
             payload["ext"] = _ext(row["caminho_bruto"])
-            payload["texto_preview"] = (row["texto"] or "")[:12000]
+            payload["texto_preview"] = row["texto"] or ""
             payload.pop("texto", None)
             payload["autos"] = self._autos(con, file_id)
         _json_response(self, payload)
