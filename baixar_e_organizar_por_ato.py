@@ -173,6 +173,8 @@ class CacheDB:
       - index_folders: pastas-raiz já indexadas com sucesso
       - meta: marcadores globais, como índice completo
       - sif_pares: pares (lei, ato) por voto
+      - public_updates: arquivos novos/alterados ainda pendentes no índice público
+      - drive_revisions: modifiedTime já concluído, para deduplicar a sobreposição
     Thread-safe via lock de escrita; leituras usam conexão por thread.
     """
 
@@ -203,6 +205,17 @@ class CacheDB:
                     file_id     TEXT PRIMARY KEY,
                     pares       TEXT   -- JSON list de [lei, ato]; NULL = sem par
                 );
+                CREATE TABLE IF NOT EXISTS public_updates (
+                    file_id       TEXT PRIMARY KEY,
+                    reason        TEXT NOT NULL,
+                    modified_time TEXT,
+                    detected_at   REAL NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS drive_revisions (
+                    file_id       TEXT PRIMARY KEY,
+                    modified_time TEXT NOT NULL,
+                    processed_at  REAL NOT NULL
+                );
             """)
 
     def _conn(self) -> sqlite3.Connection:
@@ -217,6 +230,25 @@ class CacheDB:
         with self._wlock:
             self._conn().execute(
                 "INSERT OR IGNORE INTO arquivos VALUES (?,?,?,?,?)",
+                (item.file_id, item.file_name, item.file_size,
+                 str(item.destination), item.instancia),
+            )
+            self._conn().commit()
+
+    def upsert_arquivo(self, item: "DownloadItem") -> None:
+        """Inclui ou atualiza metadados sem criar uma segunda cópia do file_id."""
+        with self._wlock:
+            self._conn().execute(
+                """
+                INSERT INTO arquivos
+                    (file_id, file_name, file_size, destination, instancia)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(file_id) DO UPDATE SET
+                    file_name=excluded.file_name,
+                    file_size=excluded.file_size,
+                    destination=excluded.destination,
+                    instancia=excluded.instancia
+                """,
                 (item.file_id, item.file_name, item.file_size,
                  str(item.destination), item.instancia),
             )
@@ -263,6 +295,82 @@ class CacheDB:
 
     def count_indexed_folders(self) -> int:
         return self._conn().execute("SELECT COUNT(*) FROM index_folders").fetchone()[0]
+
+    def indexed_folders(self) -> list[dict[str, str]]:
+        rows = self._conn().execute(
+            "SELECT folder_id, folder_name, instancia FROM index_folders"
+        ).fetchall()
+        return [
+            {"id": row[0], "name": row[1], "instancia": row[2]}
+            for row in rows
+        ]
+
+    def get_meta(self, key: str) -> str | None:
+        row = self._conn().execute(
+            "SELECT value FROM meta WHERE key=?", (key,)
+        ).fetchone()
+        return row[0] if row else None
+
+    def set_meta(self, key: str, value: str) -> None:
+        with self._wlock:
+            self._conn().execute(
+                "INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)",
+                (key, value),
+            )
+            self._conn().commit()
+
+    def mark_public_update(
+        self, file_id: str, reason: str, modified_time: str | None = None
+    ) -> None:
+        with self._wlock:
+            self._conn().execute(
+                """
+                INSERT INTO public_updates
+                    (file_id, reason, modified_time, detected_at)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(file_id) DO UPDATE SET
+                    reason=excluded.reason,
+                    modified_time=excluded.modified_time,
+                    detected_at=excluded.detected_at
+                """,
+                (file_id, reason, modified_time, time.time()),
+            )
+            self._conn().commit()
+
+    def pending_public_updates(self) -> dict[str, str]:
+        rows = self._conn().execute(
+            "SELECT file_id, reason FROM public_updates"
+        ).fetchall()
+        return {row[0]: row[1] for row in rows}
+
+    def get_drive_revision(self, file_id: str) -> str | None:
+        row = self._conn().execute(
+            "SELECT modified_time FROM drive_revisions WHERE file_id=?",
+            (file_id,),
+        ).fetchone()
+        return row[0] if row else None
+
+    def clear_public_update(self, file_id: str) -> None:
+        with self._wlock:
+            con = self._conn()
+            row = con.execute(
+                "SELECT modified_time FROM public_updates WHERE file_id=?",
+                (file_id,),
+            ).fetchone()
+            if row and row[0]:
+                con.execute(
+                    """
+                    INSERT INTO drive_revisions
+                        (file_id, modified_time, processed_at)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(file_id) DO UPDATE SET
+                        modified_time=excluded.modified_time,
+                        processed_at=excluded.processed_at
+                    """,
+                    (file_id, row[0], time.time()),
+                )
+            con.execute("DELETE FROM public_updates WHERE file_id=?", (file_id,))
+            self._conn().commit()
 
     def clear_sif(self) -> None:
         with self._wlock:
@@ -313,7 +421,9 @@ def is_2a(name: str) -> bool:
 _1A_RE = re.compile(r"^sessao[^\d]+(\d{3})\b")
 def is_1a(name: str) -> bool:
     m = _1A_RE.match(_norm(name))
-    return bool(m) and 1 <= int(m.group(1)) <= 449
+    # As sessões continuam crescendo; limitar a 449 fazia as novas deixarem de
+    # aparecer silenciosamente no acervo.
+    return bool(m) and 1 <= int(m.group(1)) <= 999
 
 
 # =============================================================================

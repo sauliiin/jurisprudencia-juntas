@@ -22,7 +22,7 @@ indexação do Drive -> download dos arquivos -> organização por lei/ato
 ```
 
 1. A indexação procura, no Google Drive, as pastas de interesse:
-   - 1ª instância: pastas `SESSÃO NNN`, de `001` até `449`.
+   - 1ª instância: pastas `SESSÃO NNN` (inclusive as sessões novas após a 449).
    - 2ª instância: pastas com variações de `Votos dos Relatores`.
 
 2. O download baixa os arquivos encontrados:
@@ -202,6 +202,46 @@ GitHub Pages não depende dele.
 Pasta canônica para o site de busca. Diferente de `pdfs_por_lei_e_ato/`, ela
 guarda uma única cópia de cada voto, então um voto com vários autos/atos não é
 duplicado.
+
+### Atualização incremental (recomendada)
+
+Para descobrir e processar somente arquivos novos ou alterados desde a última
+atualização:
+
+```bash
+python3 -u preparar_acervo_publico.py --buscar-novos
+```
+
+Esse modo consulta no Drive apenas os metadados com `modifiedTime` posterior ao
+último scan, mantém o cache existente e cria uma fila persistente de pendências.
+Só essa fila é baixada; os demais arquivos não são baixados nem reprocessados.
+Uma sobreposição de cinco minutos na consulta, combinada com deduplicação por
+`file_id` e `modifiedTime`, evita perder arquivos na virada entre duas
+execuções sem baixar novamente uma revisão já concluída.
+
+Se o SQLite local não existir ou estiver incompleto, o script restaura nele os
+registros do `site_data/votos.jsonl` antes de exportar. Assim, uma atualização
+pequena é mesclada ao índice existente em vez de substituí-lo apenas pelos
+arquivos novos.
+
+Para definir manualmente o início da primeira consulta incremental:
+
+```bash
+python3 -u preparar_acervo_publico.py \
+  --buscar-novos \
+  --desde 2026-06-01T00:00:00-03:00
+```
+
+Depois de sincronizar os arquivos novos de `votos_brutos/` com a pasta pública,
+reaplique os links no índice:
+
+```bash
+python3 -u atualizar_links_drive_publico.py ID_DA_PASTA_PUBLICA
+```
+
+O token atual do pipeline usa acesso somente leitura ao Drive: a sincronização
+com a pasta pública continua sendo uma etapa separada. Os registros que ainda
+não foram enviados permanecem pesquisáveis e exibem a prévia textual no site.
 
 Crie/atualize a pasta bruta e o índice enriquecido com:
 

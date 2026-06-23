@@ -27,7 +27,7 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict, dataclass
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterable
 
@@ -42,15 +42,22 @@ from baixar_e_organizar_por_ato import (
     LOGIN_USER,
     CacheDB,
     DownloadItem,
+    TIPO_MIME,
     _DECISAO_RE,
     _do_download,
     _extract_assunto,
     _extract_protocolo,
     _extrair_texto,
+    _fname_para,
+    _iter,
     _load_creds,
     _new_service,
+    _resolve,
     _retry,
     _san,
+    _unique,
+    is_1a,
+    is_2a,
     motivo_documento_de_sessao_nao_decisao,
 )
 
@@ -197,6 +204,225 @@ def _cache_file_count(path: Path) -> int:
             con.close()
     except sqlite3.Error:
         return 0
+
+
+def _parse_iso_datetime(value: str) -> datetime:
+    parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _drive_modified_query_time(value: datetime) -> str:
+    return value.astimezone(timezone.utc).isoformat(timespec="seconds").replace(
+        "+00:00", "Z"
+    )
+
+
+def _drive_metadata(service, file_id: str, memo: dict[str, dict]) -> dict:
+    if file_id not in memo:
+        memo[file_id] = _retry(
+            lambda: service.files().get(
+                fileId=file_id,
+                fields="id,name,mimeType,size,parents,modifiedTime,shortcutDetails",
+                supportsAllDrives=True,
+            ).execute(),
+            what=f"Drive metadados {file_id}",
+        )
+    return memo[file_id]
+
+
+def _scope_for_parents(
+    service,
+    parent_ids: Iterable[str],
+    roots: dict[str, dict[str, str]],
+    metadata: dict[str, dict],
+) -> tuple[dict[str, str], list[str]] | None:
+    """Encontra uma pasta-raiz conhecida e o caminho relativo até o arquivo."""
+    queue: list[tuple[str, tuple[str, ...]]] = [
+        (parent_id, ()) for parent_id in parent_ids
+    ]
+    visited: set[str] = set()
+    while queue:
+        folder_id, child_to_parent = queue.pop(0)
+        if folder_id in visited:
+            continue
+        visited.add(folder_id)
+
+        known = roots.get(folder_id)
+        if known:
+            return known, list(reversed(child_to_parent))
+
+        folder = _drive_metadata(service, folder_id, metadata)
+        name = folder.get("name", folder_id)
+        instancia = ""
+        if is_1a(name):
+            instancia = "1a_instancia"
+        elif is_2a(name):
+            instancia = "2a_instancia"
+        if instancia:
+            root = {"id": folder_id, "name": name, "instancia": instancia}
+            roots[folder_id] = root
+            return root, list(reversed(child_to_parent))
+
+        next_path = child_to_parent + (_san(name),)
+        queue.extend(
+            (parent_id, next_path) for parent_id in folder.get("parents", [])
+        )
+    return None
+
+
+def _latest_incremental_start(
+    explicit: str, cache: CacheDB, marco: dict
+) -> datetime:
+    if explicit:
+        return _parse_iso_datetime(explicit)
+
+    # Depois do primeiro scan, esta é a única data que representa de fato uma
+    # consulta ao Drive. O marco pode ser regravado mais tarde só para atualizar
+    # links públicos; usá-lo abriria uma janela capaz de perder arquivos.
+    last_scan = cache.get_meta("last_public_drive_scan_at")
+    checkpoint = last_scan or str(marco.get("updated_at") or "")
+    if not checkpoint:
+        raise ValueError(
+            "Não há data de retomada. Informe --desde ou faça a indexação completa primeiro."
+        )
+    # Uma pequena sobreposição protege contra arquivos gravados exatamente na
+    # virada entre duas consultas. O file_id continua garantindo deduplicação.
+    return _parse_iso_datetime(checkpoint) - timedelta(minutes=5)
+
+
+def buscar_atualizacoes_drive(
+    *,
+    cache: CacheDB,
+    token_path: Path,
+    output_dir: Path,
+    marco: dict,
+    desde: str = "",
+) -> dict[str, int | str]:
+    """Atualiza o cache consultando somente itens alterados desde o último marco."""
+    service = _new_service(token_path)
+    started_at = datetime.now(timezone.utc)
+    since = _latest_incremental_start(desde, cache, marco)
+    allowed_mimes = set(TIPO_MIME.values())
+    shortcut_mime = "application/vnd.google-apps.shortcut"
+    mime_query = " or ".join(
+        f"mimeType='{mime}'" for mime in sorted(allowed_mimes | {shortcut_mime})
+    )
+    query = (
+        "trashed=false and "
+        f"modifiedTime > '{_drive_modified_query_time(since)}' and ({mime_query})"
+    )
+
+    roots = {folder["id"]: folder for folder in cache.indexed_folders()}
+    if not roots:
+        raise ValueError(
+            "O cache não contém pastas-raiz. Rode baixar_e_organizar_por_ato.py uma vez."
+        )
+    known = {item.file_id: item for item in cache.load_arquivos()}
+    planned = {item.destination for item in known.values()}
+    metadata: dict[str, dict] = {}
+    handled: set[str] = set()
+    stats = {
+        "consultados": 0,
+        "novos": 0,
+        "alterados": 0,
+        "revisoes_iguais": 0,
+        "fora_escopo": 0,
+    }
+
+    print(
+        "Drive incremental desde "
+        f"{_drive_modified_query_time(since)} (somente metadados)...",
+        flush=True,
+    )
+    for raw in _iter(
+        service,
+        query,
+        "id,name,mimeType,size,parents,modifiedTime,shortcutDetails",
+    ):
+        stats["consultados"] += 1
+        resolved = _resolve(raw)
+        file_id = resolved.get("id")
+        mime_type = resolved.get("mimeType")
+        if not file_id or mime_type not in allowed_mimes or file_id in handled:
+            continue
+
+        source = raw
+        if raw.get("mimeType") == shortcut_mime:
+            target = _drive_metadata(service, file_id, metadata)
+            source = {
+                **target,
+                "name": raw.get("name") or target.get("name") or file_id,
+                "parents": raw.get("parents", []),
+                "modifiedTime": max(
+                    raw.get("modifiedTime", ""), target.get("modifiedTime", "")
+                ),
+            }
+
+        modified_time = source.get("modifiedTime")
+        if (
+            modified_time
+            and cache.get_drive_revision(file_id) == modified_time
+        ):
+            handled.add(file_id)
+            stats["revisoes_iguais"] += 1
+            continue
+
+        existing = known.get(file_id)
+        filename = _fname_para(_san(source.get("name", file_id)), mime_type)
+        if existing:
+            item = DownloadItem(
+                file_id,
+                filename,
+                source.get("size"),
+                existing.destination,
+                existing.instancia,
+            )
+            reason = "modified"
+        else:
+            scope = _scope_for_parents(
+                service, raw.get("parents", []), roots, metadata
+            )
+            if not scope:
+                stats["fora_escopo"] += 1
+                continue
+            root, relative_dirs = scope
+            root_dir = (
+                output_dir
+                / root["instancia"]
+                / f"{_san(root['name'])} - {root['id'][:8]}"
+            )
+            destination = root_dir.joinpath(*relative_dirs, filename)
+            destination = _unique(destination, planned)
+            planned.add(destination)
+            item = DownloadItem(
+                file_id,
+                filename,
+                source.get("size"),
+                destination,
+                root["instancia"],
+            )
+            cache.mark_folder_indexed(root, root["instancia"])
+            reason = "new"
+
+        cache.upsert_arquivo(item)
+        cache.mark_public_update(file_id, reason, modified_time)
+        known[file_id] = item
+        handled.add(file_id)
+        stats["novos" if reason == "new" else "alterados"] += 1
+
+    scan_time = _drive_modified_query_time(started_at)
+    cache.set_meta("last_public_drive_scan_at", scan_time)
+    stats["desde"] = _drive_modified_query_time(since)
+    print(
+        "Drive incremental: "
+        f"{stats['novos']} novos, {stats['alterados']} alterados, "
+        f"{stats['revisoes_iguais']} revisões já processadas, "
+        f"{stats['fora_escopo']} fora do acervo.",
+        flush=True,
+    )
+    return stats
 
 
 def _norm_label(value: str) -> str:
@@ -483,6 +709,9 @@ class IndexStore:
 
     def save_skip(self, file_id: str, nome_arquivo: str, motivo: str) -> None:
         with self._lock, self.con:
+            self.con.execute("DELETE FROM autos WHERE voto_file_id = ?", (file_id,))
+            self.con.execute("DELETE FROM votos WHERE file_id = ?", (file_id,))
+            self.con.execute("DELETE FROM votos_fts WHERE file_id = ?", (file_id,))
             self.con.execute(
                 "INSERT OR REPLACE INTO skips VALUES (?, ?, ?, ?)",
                 (file_id, nome_arquivo, motivo, time.time()),
@@ -611,6 +840,57 @@ class IndexStore:
                 ),
             )
             self.con.execute("DELETE FROM skips WHERE file_id = ?", (record.file_id,))
+
+    def import_jsonl_missing(self, path: Path) -> int:
+        """Restaura no SQLite registros versionados sem substituir os locais."""
+        if not path.exists():
+            return 0
+        with self._lock:
+            existing = {
+                row[0] for row in self.con.execute("SELECT file_id FROM votos")
+            }
+        imported = 0
+        with path.open(encoding="utf-8") as fh:
+            for line in fh:
+                if not line.strip():
+                    continue
+                payload = json.loads(line)
+                file_id = str(payload.get("file_id") or "")
+                if not file_id or file_id in existing:
+                    continue
+                autos = [
+                    AutoInfo(
+                        numero=str(auto.get("numero") or ""),
+                        idn=str(auto.get("idn") or ""),
+                        tipo=str(auto.get("tipo") or ""),
+                        autuado=str(auto.get("autuado") or ""),
+                        infracao=str(auto.get("infracao") or ""),
+                        dispositivo_legal_transgredido=str(
+                            auto.get("dispositivo_legal_transgredido") or ""
+                        ),
+                        local_constatacao=str(auto.get("local_constatacao") or ""),
+                        lei=str(auto.get("lei") or ""),
+                        pdf_encontrado=bool(auto.get("pdf_encontrado")),
+                    )
+                    for auto in payload.get("autos", [])
+                    if isinstance(auto, dict)
+                ]
+                self.save_voto(
+                    VotoRecord(
+                        file_id=file_id,
+                        nome_arquivo=str(payload.get("nome_arquivo") or file_id),
+                        instancia=str(payload.get("instancia") or ""),
+                        decisao_instancia=str(payload.get("decisao_instancia") or "Decisão"),
+                        caminho_bruto=str(payload.get("caminho_bruto") or ""),
+                        protocolo=str(payload.get("protocolo") or ""),
+                        assunto=str(payload.get("assunto") or ""),
+                        texto=str(payload.get("texto") or ""),
+                        autos=autos,
+                    )
+                )
+                existing.add(file_id)
+                imported += 1
+        return imported
 
     def export_jsonl(self, path: Path, include_text: bool = True) -> int:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -753,10 +1033,12 @@ class DriveDownloader:
             self._local.service = _new_service(self.token_path)
         return self._local.service
 
-    def ensure_file(self, original: DownloadItem, raw_item: DownloadItem) -> str:
-        if _raw_exists(raw_item.destination, raw_item.file_size):
+    def ensure_file(
+        self, original: DownloadItem, raw_item: DownloadItem, force: bool = False
+    ) -> str:
+        if not force and _raw_exists(raw_item.destination, raw_item.file_size):
             return "exists"
-        if original.destination.exists():
+        if not force and original.destination.exists():
             raw_item.destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(original.destination, raw_item.destination)
             return "copied"
@@ -810,9 +1092,10 @@ def process_item(
     autos: AutoClient,
     refresh_autos: bool,
     remover_nao_decisoes: bool,
+    force_download: bool = False,
 ) -> ProcessResult:
     raw_item = _raw_item(item, raw_dir)
-    downloader.ensure_file(item, raw_item)
+    downloader.ensure_file(item, raw_item, force=force_download)
 
     texto = _extrair_texto(raw_item)
     if texto is None:
@@ -859,6 +1142,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--indice", default="indice_busca.db")
     parser.add_argument("--jsonl", default="site_data/votos.jsonl")
     parser.add_argument("--marco", default=MARCO_DEFAULT)
+    parser.add_argument("--drive-output", default="votos_relatores_pdfs")
     parser.add_argument("--instancia", choices=["1", "2", "ambas"], default="ambas")
     parser.add_argument("--workers", type=int, default=6)
     parser.add_argument("--sif-rate", type=float, default=5.0)
@@ -910,6 +1194,22 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Não usa o arquivo de marco para pular file_ids nesta execução.",
     )
+    parser.add_argument(
+        "--buscar-novos",
+        action="store_true",
+        help=(
+            "Consulta no Drive só arquivos novos/alterados desde o último marco, "
+            "sem refazer o índice completo."
+        ),
+    )
+    parser.add_argument(
+        "--desde",
+        default="",
+        help=(
+            "Data ISO inicial para --buscar-novos. Por padrão usa o último scan "
+            "incremental ou marco_atualizacao.json."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -936,21 +1236,36 @@ def _build_marco(
     args: argparse.Namespace,
 ) -> dict:
     ids_by_kind = store.processed_file_ids_by_kind()
-    if not ids_by_kind["votos"] and not ids_by_kind["skips"]:
-        previous = existing.get("processed_file_ids", {})
-        if isinstance(previous, dict):
-            ids_by_kind = {
-                "votos": sorted(str(item) for item in previous.get("votos", []) if item),
-                "skips": sorted(str(item) for item in previous.get("skips", []) if item),
-            }
+    # O SQLite é local e ignorado pelo Git. Una sempre seus IDs com o marco
+    # versionado; IDs presentes no SQLite prevalecem para permitir transições
+    # voto -> skip (ou o inverso) após uma alteração no Drive.
+    current_votos = set(ids_by_kind["votos"])
+    current_skips = set(ids_by_kind["skips"])
+    current_ids = current_votos | current_skips
+    previous = existing.get("processed_file_ids", {})
+    previous_votos: set[str] = set()
+    previous_skips: set[str] = set()
+    if isinstance(previous, dict):
+        previous_votos = {
+            str(item) for item in previous.get("votos", []) if item
+        }
+        previous_skips = {
+            str(item) for item in previous.get("skips", []) if item
+        }
+    ids_by_kind = {
+        "votos": sorted(current_votos | (previous_votos - current_ids)),
+        "skips": sorted(current_skips | (previous_skips - current_ids)),
+    }
 
     jsonl = _jsonl_stats(jsonl_path)
     counts = store.counts()
     previous_counts = existing.get("counts") or {}
-    if not ids_by_kind["votos"] and not ids_by_kind["skips"] and isinstance(previous_counts, dict):
+    if isinstance(previous_counts, dict):
         for key in ("votos_indexados", "autos", "autos_cache", "pulados"):
             if counts.get(key) == 0 and previous_counts.get(key):
                 counts[key] = int(previous_counts[key])
+    counts["votos_indexados"] = len(ids_by_kind["votos"])
+    counts["pulados"] = len(ids_by_kind["skips"])
     counts.update(
         {
             "jsonl_registros": jsonl["registros"],
@@ -1011,6 +1326,29 @@ def main() -> int:
     cache = CacheDB(cache_path)
     marco_path = resolve(args.marco)
     marco = {} if args.ignorar_marco else _read_json(marco_path)
+    if args.buscar_novos:
+        try:
+            buscar_atualizacoes_drive(
+                cache=cache,
+                token_path=resolve(args.token),
+                output_dir=resolve(args.drive_output),
+                marco=marco,
+                desde=args.desde,
+            )
+        except Exception as exc:
+            store.close()
+            print(f"Não foi possível buscar atualizações: {exc}")
+            return 2
+
+    jsonl_path = resolve(args.jsonl)
+    if not args.rebuild:
+        imported = store.import_jsonl_missing(jsonl_path)
+        if imported:
+            print(
+                f"Índice SQLite restaurado com {imported} registros do JSONL versionado."
+            )
+
+    pending_updates = cache.pending_public_updates()
     items = _filtrar_items(cache.load_arquivos(), args)
     total_geral = len(items)
     already_done = 0
@@ -1025,7 +1363,11 @@ def main() -> int:
             db_ids = store.processed_file_ids()
             processed_ids.update(db_ids)
         before = len(items)
-        items = [item for item in items if item.file_id not in processed_ids]
+        items = [
+            item
+            for item in items
+            if item.file_id not in processed_ids or item.file_id in pending_updates
+        ]
         already_done = before - len(items)
         if already_done:
             sources = []
@@ -1038,7 +1380,6 @@ def main() -> int:
                 f"Retomada: {already_done} arquivos já varridos serão pulados ({origem})."
             )
     if not items:
-        jsonl_path = resolve(args.jsonl)
         if store.counts()["votos_indexados"] == 0 and jsonl_path.exists():
             exported = _jsonl_stats(jsonl_path)["registros"]
             print(
@@ -1110,6 +1451,7 @@ def main() -> int:
                 auto_client,
                 args.refresh_autos,
                 not args.manter_nao_decisoes,
+                pending_updates.get(item.file_id) == "modified",
             )
             for item in items
         ]
@@ -1123,6 +1465,7 @@ def main() -> int:
 
             if result.status == "ok" and result.record:
                 store.save_voto(result.record)
+                cache.clear_public_update(result.file_id)
                 ok += 1
                 auto_count = len(result.record.autos)
                 if not args.quiet_items:
@@ -1133,6 +1476,7 @@ def main() -> int:
                     )
             else:
                 store.save_skip(result.file_id, result.nome_arquivo, result.motivo)
+                cache.clear_public_update(result.file_id)
                 skipped += 1
                 if not args.quiet_items:
                     print(
