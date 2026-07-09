@@ -339,6 +339,27 @@ Se algum arquivo não for encontrado na pasta pública, o script gera
 `site_data/arquivos_sem_link_publico.txt`. Esse arquivo é diagnóstico local e
 fica ignorado pelo Git.
 
+## Atualização Completa (`atualizar_tudo.sh`)
+
+Para não rodar cada script manualmente, `atualizar_tudo.sh` executa em sequência
+a atualização incremental de votos, links públicos e pareceres, e no final já
+publica (`git add` + `commit` + `push`) as mudanças em `site_data/*.jsonl` e
+`marco_atualizacao.json`:
+
+```bash
+./atualizar_tudo.sh
+```
+
+Ele exige `credentials.json` e `token.json` na raiz do projeto (veja
+[Preparação](#preparação)). Se não houver nada novo desde a última execução, o
+script não cria commit.
+
+Para acompanhar o progresso localmente enquanto ele roda em segundo plano:
+
+```bash
+tail -f /home/mestrey/Documentos/GitHub/jurisprudencia-juntas/atualizar_tudo.log
+```
+
 ## Saídas
 
 ### `pdfs_por_lei_e_ato/`
