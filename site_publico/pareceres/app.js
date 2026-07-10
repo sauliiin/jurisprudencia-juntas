@@ -11,7 +11,7 @@ const state = {
   records: [],
   byId: new Map(),
   selected: null,
-  previewMode: "text",
+  previewMode: "file",
   loadingData: false,
 };
 
@@ -294,7 +294,7 @@ function renderResults() {
 
 function selectParecer(fileId) {
   state.selected = state.byId.get(fileId);
-  state.previewMode = "text";
+  state.previewMode = "file";
   renderResults();
   renderDetail();
 }

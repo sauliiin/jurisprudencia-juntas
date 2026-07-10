@@ -18,7 +18,16 @@ python3 -u preparar_acervo_publico.py --buscar-novos
 
 echo
 echo "== 3/4 Atualizando links públicos do Drive (atualizar_links_drive_publico.py) =="
+# Esse script retorna código 1 quando há arquivos ainda sem link público
+# (normal: eles continuam pesquisáveis até serem sincronizados com a pasta
+# pública). Não é motivo para abortar o restante da atualização.
+set +e
 python3 -u atualizar_links_drive_publico.py "$PASTA_PUBLICA_VOTOS"
+status=$?
+set -e
+if [ "$status" -ne 0 ]; then
+  echo "[aviso] atualizar_links_drive_publico.py terminou com pendências (arquivos sem link público). Seguindo mesmo assim."
+fi
 
 echo
 echo "== 4/4 Atualizando pareceres (preparar_pareceres.py) =="
