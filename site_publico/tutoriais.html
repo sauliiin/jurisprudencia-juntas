@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Vídeos Tutoriais</title>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    body {
+      padding: 40px;
+      overflow: auto;
+      background: var(--bg);
+      color: var(--ink);
+    }
+    .tutorial-container {
+      margin: 0 auto;
+      background: rgba(10, 16, 25, 0.9);
+      border: 1px solid var(--accent);
+      padding: 40px;
+      max-width: 900px;
+      width: 100%;
+      box-shadow: 0 0 20px rgba(0, 240, 255, 0.15);
+      line-height: 1.8;
+    }
+    .tutorial-container h1 {
+      color: var(--accent-neon);
+      text-shadow: 0 0 10px rgba(255, 251, 0, 0.5);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      text-align: center;
+      margin-top: 0;
+      margin-bottom: 30px;
+      border-bottom: 2px solid var(--accent);
+      padding-bottom: 20px;
+    }
+    .back-btn {
+      display: inline-flex;
+      align-items: center;
+      margin-bottom: 20px;
+      color: var(--accent);
+      text-decoration: none;
+      font-weight: bold;
+      text-transform: uppercase;
+      font-size: 14px;
+      letter-spacing: 1px;
+      transition: color 0.2s;
+    }
+    .back-btn:hover {
+      color: var(--accent-neon);
+      text-shadow: 0 0 8px rgba(255, 251, 0, 0.5);
+    }
+    .video-grid {
+      display: grid;
+      gap: 40px;
+      margin-top: 20px;
+    }
+    .video-card {
+      background: rgba(5, 7, 10, 0.8);
+      border: 1px solid rgba(0, 240, 255, 0.3);
+      padding: 20px;
+      border-left: 4px solid var(--accent-neon);
+      transition: all 0.3s ease;
+    }
+    .video-card:hover {
+      box-shadow: 0 0 15px rgba(255, 251, 0, 0.2);
+      border-color: rgba(255, 251, 0, 0.5);
+    }
+    .video-card h2 {
+      color: #fff;
+      font-size: 20px;
+      margin-top: 0;
+      margin-bottom: 15px;
+      text-shadow: 0 0 5px rgba(255, 255, 255, 0.3);
+    }
+    .video-wrapper {
+      position: relative;
+      padding-bottom: 56.25%; /* 16:9 Aspect Ratio */
+      height: 0;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      box-shadow: 0 0 10px rgba(0,0,0,0.5);
+    }
+    .video-wrapper iframe {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      border: 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="tutorial-container">
+    <a href="instrucoes.html" class="back-btn">&lt; Voltar para Instruções</a>
+    
+    <h1>Vídeos Tutoriais</h1>
+    
+    <div class="video-grid">
+      
+      <!-- Aula 1 -->
+      <div class="video-card">
+        <h2>Aula 1: Se familiarizando com o BH Digital</h2>
+        <div class="video-wrapper">
+          <iframe src="https://www.youtube.com/embed/xMwu5qK-xJI" title="Aula 1" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+        </div>
+      </div>
+
+      <!-- Aula 2 -->
+      <div class="video-card">
+        <h2>Aula 2: Compreendendo a autuação</h2>
+        <div class="video-wrapper">
+          <iframe src="https://www.youtube.com/embed/GKVgh8wjLVQ" title="Aula 2" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+        </div>
+      </div>
+
+      <!-- Aula 3 -->
+      <div class="video-card">
+        <h2>Aula 3: Fazendo um voto</h2>
+        <div class="video-wrapper">
+          <iframe src="https://www.youtube.com/embed/UCFsH5dkRok" title="Aula 3" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+        </div>
+      </div>
+
+    </div>
+  </div>  
+</body>
+</html>
