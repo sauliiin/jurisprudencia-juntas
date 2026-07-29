@@ -1,6 +1,7 @@
 # Credenciais locais
 credentials.json
 token.json
+token_upload.json
 .env
 .env.*
 

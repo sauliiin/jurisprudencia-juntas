@@ -1,4 +1,6 @@
 const DATA_URL = "../site_data/votos.jsonl";
+const AUTOS_DIR = "Autos";
+const AUTOS_MANIFEST_URL = `${AUTOS_DIR}/manifest.json`;
 
 const state = {
   mode: "static",
@@ -16,6 +18,8 @@ const state = {
   selected: null,
   previewMode: "file",
   loadingData: false,
+  autosLocais: null,
+  autosDrive: null,
 };
 
 const els = {
@@ -308,7 +312,37 @@ async function loadStaticData() {
   els.stats.textContent = `${records.length.toLocaleString("pt-BR")} votos · ${autos.toLocaleString("pt-BR")} autos`;
 }
 
+// Manifesto dos autos baixados do SIF. Dois formatos aceitos:
+//   {"autos": ["20220057378AI", ...]}            -> PDFs em Autos/
+//   {"modo":"drive","autos":{"AUTO":"file_id"}}  -> PDFs no Google Drive
+// Sem o manifesto o site segue funcionando: o link continua apontando para o SIF.
+async function loadAutosManifest() {
+  try {
+    const response = await fetch(AUTOS_MANIFEST_URL, { cache: "no-cache" });
+    if (!response.ok) return;
+    const manifest = await response.json();
+    const autos = manifest.autos;
+    if (Array.isArray(autos)) {
+      state.autosLocais = new Set(autos);
+    } else if (autos && typeof autos === "object") {
+      state.autosDrive = new Map(Object.entries(autos));
+    }
+  } catch (error) {
+    state.autosLocais = null;
+    state.autosDrive = null;
+  }
+}
+
+// URL do auto: Drive > PDF local > SIF (que sera depreciado).
+function autoHref(chave) {
+  const driveId = state.autosDrive?.get(chave);
+  if (driveId) return `https://drive.google.com/file/d/${encodeURIComponent(driveId)}/view`;
+  if (state.autosLocais?.has(chave)) return `${AUTOS_DIR}/${chave}.pdf`;
+  return null;
+}
+
 async function init() {
+  await loadAutosManifest();
   if (await apiAvailable()) {
     state.mode = "api";
     const stats = await fetchJson("/api/stats");
@@ -466,14 +500,21 @@ function renderAutos(autos = []) {
     .map(
       (auto) => {
         let numeroHtml = `<strong>${escapeHtml(auto.numero)}</strong>`;
+        let badge = auto.pdf_encontrado ? "SIF" : "sem PDF";
         if (auto.numero) {
           const clean = String(auto.numero).replace(/[^a-z0-9]/gi, "");
           const match = clean.match(/^(\d+)([a-z]*)$/i);
           if (match) {
             const idn = encodeURIComponent(match[1]);
             const tip = encodeURIComponent((match[2] || "").toUpperCase());
-            const sifUrl = `https://sif-piloto.pbh.gov.br/MostraAuto.php?s_Tip_Auto=&s_Idn_Doct_Lavr=${idn}&s_Dat_Lavr=&s_Dat_Lavr2=&s_Dat_Fina=&s_Nom_Raza_Soci=&s_Nom_Fant=&s_Num_Cpf_CGC=&Idn_Equp=&Fiscal=&s_Idn_Cmpo_Lei=&s_Tip_Logr=&s_Nom_Logr=&s_Num_Imov_Logr=&s_Nom_Bair=&s_Num_CEP=&s_Tip_Loca=&s_Nom_Loca=&s_Num_Imov_Loca=&s_Nom_Bair_Loca=&s_Num_CEP_Loca=&s_Tip_Cienc=&s_Sit_Regt=A&Idn_Doct_Lavr=${idn}&Tip_Auto=${tip}`;
-            numeroHtml = `<a href="${sifUrl}" target="_blank" rel="noreferrer" class="auto-link"><strong>${escapeHtml(auto.numero)}</strong></a>`;
+            const chave = clean.toUpperCase();
+            let href = autoHref(chave);
+            if (href) {
+              badge = "PDF";
+            } else {
+              href = `https://sif-piloto.pbh.gov.br/MostraAuto.php?s_Tip_Auto=&s_Idn_Doct_Lavr=${idn}&s_Dat_Lavr=&s_Dat_Lavr2=&s_Dat_Fina=&s_Nom_Raza_Soci=&s_Nom_Fant=&s_Num_Cpf_CGC=&Idn_Equp=&Fiscal=&s_Idn_Cmpo_Lei=&s_Tip_Logr=&s_Nom_Logr=&s_Num_Imov_Logr=&s_Nom_Bair=&s_Num_CEP=&s_Tip_Loca=&s_Nom_Loca=&s_Num_Imov_Loca=&s_Nom_Bair_Loca=&s_Num_CEP_Loca=&s_Tip_Cienc=&s_Sit_Regt=A&Idn_Doct_Lavr=${idn}&Tip_Auto=${tip}`;
+            }
+            numeroHtml = `<a href="${href}" target="_blank" rel="noreferrer" class="auto-link"><strong>${escapeHtml(auto.numero)}</strong></a>`;
           }
         }
 
@@ -481,7 +522,7 @@ function renderAutos(autos = []) {
       <section class="auto-row">
         <div>
           ${numeroHtml}
-          <span class="badge">${auto.pdf_encontrado ? "SIF" : "sem PDF"}</span>
+          <span class="badge">${badge}</span>
         </div>
         <div class="auto-fields">
           <div><span>Autuado</span> ${escapeHtml(auto.autuado || "—")}</div>
