@@ -1,4 +1,14 @@
-# Google Drive Downloader and Organizer
+# Jurisprudência das Juntas — acervo público de decisões
+
+> **English summary.** Data pipeline that collects ~12,000 administrative decisions
+> (1st and 2nd instance) of Belo Horizonte's tax/inspection appeal boards from Google
+> Drive, extracts text from PDF/DOCX/Google Docs (with OCR fallback), enriches each
+> decision with structured data scraped from the city's inspection system (SIF:
+> offender, infraction, legal provision, location), and publishes a full-text search
+> site on GitHub Pages. Three concurrent stages linked by queues, SQLite FTS5 index,
+> incremental sync by Drive `modifiedTime`, and a versioned resume marker.
+> The corpus also powers [JurisAI](https://github.com/sauliiin/jurisai), a RAG +
+> agent platform for analysing administrative proceedings.
 
 Pipeline único para baixar votos dos relatores do Google Drive, ler decisões em
 PDF/Word/Google Docs, consultar os autos no SIF e organizar os arquivos por
@@ -101,6 +111,17 @@ Google Drive. O token local fica salvo em:
 ```text
 token.json
 ```
+
+As credenciais do SIF ficam no ambiente, nunca no código. Crie um `.env` na raiz
+(ignorado pelo Git):
+
+```bash
+SIF_USER=seu_usuario
+SIF_PASS=sua_senha
+```
+
+O `atualizar_tudo.sh` carrega esse arquivo automaticamente. Para rodar os scripts
+Python diretamente, exporte as variáveis antes (`set -a; . ./.env; set +a`).
 
 ## Como Rodar
 
@@ -350,8 +371,8 @@ publica (`git add` + `commit` + `push`) as mudanças em `site_data/*.jsonl` e
 ./atualizar_tudo.sh
 ```
 
-Ele exige `credentials.json` e `token.json` na raiz do projeto (veja
-[Preparação](#preparação)). Se não houver nada novo desde a última execução, o
+Ele exige `credentials.json`, `token.json` e o `.env` com `SIF_USER`/`SIF_PASS`
+na raiz do projeto (veja [Preparação](#preparação)). Se não houver nada novo desde a última execução, o
 script não cria commit.
 
 Para acompanhar o progresso localmente enquanto ele roda em segundo plano:
@@ -503,6 +524,7 @@ Os artefatos locais ou sensíveis ficam fora do Git:
 
 - `credentials.json`
 - `token.json`
+- `.env` (credenciais do SIF)
 - `votos_relatores_pdfs/`
 - `pdfs_por_lei_e_ato/`
 - `votos_brutos/`
@@ -518,6 +540,18 @@ Os artefatos locais ou sensíveis ficam fora do Git:
 O arquivo `site_data/votos.jsonl` não é ignorado: ele é necessário para o site
 estático no GitHub Pages. O arquivo `marco_atualizacao.json` também não é
 ignorado: ele é o ponto de retomada versionado do acervo público.
+
+## PDFs Dos Autos (`scripts/autos/`)
+
+Scripts sob demanda, fora do `atualizar_tudo.sh`, que mantêm os PDFs dos autos de
+infração acessíveis pelo site:
+
+1. `scripts/autos/baixar_autos_sif.py` baixa do SIF os PDFs dos autos citados em
+   `site_data/votos.jsonl` para `site_publico/Autos/` (retomável).
+2. `scripts/autos/upload_autos_drive.py` envia essa pasta para o Google Drive
+   (escopo de escrita, token separado em `token_upload.json`).
+3. `scripts/autos/mapear_autos_drive.py` gera `site_publico/Autos/manifest.json`,
+   que o site usa para apontar cada auto para o arquivo no Drive.
 
 ## Observações
 

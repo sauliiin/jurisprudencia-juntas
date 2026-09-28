@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-SCRIPT TEMPORARIO E ISOLADO — mapeia os autos ja enviados ao Drive.
+Mapeia os autos ja enviados ao Drive.
 
-Par do tmp_baixar_autos_sif.py. Rode DEPOIS de subir a pasta Autos/ no Drive.
+Par do baixar_autos_sif.py. Rode DEPOIS de subir a pasta Autos/ no Drive.
 Nao faz upload e nao precisa de escopo de escrita: usa o token.json readonly
 que o projeto ja tem.
 
-    python3 tmp_mapear_autos_drive.py                 # usa a pasta Autos padrao
-    python3 tmp_mapear_autos_drive.py --folder-id XXX # outra pasta
+    python3 scripts/autos/mapear_autos_drive.py                 # usa a pasta Autos padrao
+    python3 scripts/autos/mapear_autos_drive.py --folder-id XXX # outra pasta
 
 Varre a pasta (recursivamente, entao subpastas por tipo funcionam), casa o nome
 do arquivo com a chave do auto — "20220057378AI.pdf" -> "20220057378AI" — e
@@ -31,7 +31,7 @@ from googleapiclient.discovery import build
 
 from baixar_e_organizar_por_ato import _load_creds
 
-RAIZ = Path(__file__).resolve().parent
+RAIZ = Path(__file__).resolve().parents[2]
 VOTOS = RAIZ / "site_data" / "votos.jsonl"
 MANIFEST = RAIZ / "site_publico" / "Autos" / "manifest.json"
 FOLDER_MIME = "application/vnd.google-apps.folder"

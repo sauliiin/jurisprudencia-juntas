@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-SCRIPT TEMPORARIO E ISOLADO — baixa os PDFs dos autos do SIF para a pasta Autos/.
+Baixa os PDFs dos autos do SIF para a pasta Autos/.
 
-Nao faz parte do pipeline (atualizar_tudo.sh). Rode uma vez, confira o resultado
-e apague o arquivo depois.
+Nao faz parte do pipeline (atualizar_tudo.sh): rode sob demanda quando houver
+autos novos. Precisa de SIF_USER e SIF_PASS no ambiente (ou no .env).
 
-    python3 tmp_baixar_autos_sif.py --limite 20     # teste rapido
-    python3 tmp_baixar_autos_sif.py                 # tudo (~13k autos)
+    python3 scripts/autos/baixar_autos_sif.py --limite 20     # teste rapido
+    python3 scripts/autos/baixar_autos_sif.py                 # tudo (~13k autos)
 
 Le os autos de site_data/votos.jsonl (campos idn/tipo/numero), consulta o SIF
 uma vez por auto unico e grava site_publico/Autos/<IDN><TIPO>.pdf. E retomavel:
@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 import threading
@@ -30,14 +31,14 @@ from pathlib import Path
 
 import requests
 
-RAIZ = Path(__file__).resolve().parent
+RAIZ = Path(__file__).resolve().parents[2]
 VOTOS = RAIZ / "site_data" / "votos.jsonl"
 
 SIF_BASE = "https://sif-piloto.pbh.gov.br"
 LOGIN_URL = f"{SIF_BASE}/Login.php?comp=1&ccsForm=Login"
 AUTO_URL = f"{SIF_BASE}/MostraAuto.php"
-LOGIN_USER = "saulohr"
-LOGIN_PASS = "saulohr"
+LOGIN_USER = os.environ.get("SIF_USER", "")
+LOGIN_PASS = os.environ.get("SIF_PASS", "")
 
 TENTATIVAS = 4
 ESPERA_BASE = 2.0  # segundos, dobra a cada tentativa

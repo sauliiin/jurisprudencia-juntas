@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-SCRIPT TEMPORARIO E ISOLADO — sobe os PDFs dos autos para a pasta Autos do Drive.
+Sobe os PDFs dos autos para a pasta Autos do Drive.
 
-Par do tmp_baixar_autos_sif.py. Nao faz parte do pipeline.
+Par do baixar_autos_sif.py. Nao faz parte do pipeline.
 
-    python3 tmp_upload_autos_drive.py --so-login   # so o consentimento OAuth
-    python3 tmp_upload_autos_drive.py              # sobe tudo (paralelo)
-    python3 tmp_upload_autos_drive.py --so-manifesto
+    python3 scripts/autos/upload_autos_drive.py --so-login   # so o consentimento OAuth
+    python3 scripts/autos/upload_autos_drive.py              # sobe tudo (paralelo)
+    python3 scripts/autos/upload_autos_drive.py --so-manifesto
 
 Escopo: precisa de 'drive' (leitura+escrita). O escopo 'drive.file' NAO serve —
 com ele a aplicacao nao enxerga a pasta Autos criada pelo usuario e o upload
@@ -35,7 +35,7 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaFileUpload
 
-RAIZ = Path(__file__).resolve().parent
+RAIZ = Path(__file__).resolve().parents[2]
 PASTA_LOCAL = RAIZ / "site_publico" / "Autos"
 MANIFEST = PASTA_LOCAL / "manifest.json"
 VOTOS = RAIZ / "site_data" / "votos.jsonl"
