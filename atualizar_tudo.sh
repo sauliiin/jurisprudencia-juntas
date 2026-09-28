@@ -7,6 +7,17 @@
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
 
+# Credenciais locais (SIF_USER, SIF_PASS) ficam no .env, fora do Git.
+if [ -f .env ]; then
+  set -a
+  . ./.env
+  set +a
+fi
+if [ -z "${SIF_USER:-}" ] || [ -z "${SIF_PASS:-}" ]; then
+  echo "Defina SIF_USER e SIF_PASS no ambiente ou no arquivo .env." >&2
+  exit 1
+fi
+
 PASTA_PUBLICA_VOTOS="1LW-tLhZfsc8l1-vBFqrFK86rtuUPIDer"
 
 echo "== 1/4 Organizando votos por lei/ato (baixar_e_organizar_por_ato.py) =="

@@ -38,6 +38,7 @@ from __future__ import annotations
 import argparse
 import csv
 import io
+import os
 import queue
 import re
 import shutil
@@ -128,8 +129,9 @@ MIME_EXT  = {PDF_MIME: ".pdf", GDOC_MIME: ".txt", DOCX_MIME: ".docx", DOC_MIME: 
 SIF_BASE  = "https://sif-piloto.pbh.gov.br"
 LOGIN_URL = f"{SIF_BASE}/Login.php?comp=1&ccsForm=Login"
 AUTO_URL  = f"{SIF_BASE}/MostraAuto.php"
-LOGIN_USER = "saulohr"
-LOGIN_PASS = "saulohr"
+# Credenciais do SIF vêm do ambiente (ou do .env carregado por atualizar_tudo.sh).
+LOGIN_USER = os.environ.get("SIF_USER", "")
+LOGIN_PASS = os.environ.get("SIF_PASS", "")
 
 AUTO_RE = re.compile(r"\b(\d{8,14})([A-Z]{2})\b")
 LEI_RE  = re.compile(r"LEI\s+\d+[\./]\d+", re.IGNORECASE)
