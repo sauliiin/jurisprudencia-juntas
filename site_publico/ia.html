@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Como funciona a IA do site</title>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    body {
+      padding: 40px 16px;
+      overflow: auto;
+      background: var(--bg);
+      color: var(--ink);
+    }
+    .ia-page {
+      margin: 0 auto;
+      max-width: 760px;
+      background: rgba(10, 16, 25, 0.8);
+      border: 1px solid var(--accent);
+      padding: 32px;
+      line-height: 1.6;
+      box-shadow: 0 0 20px rgba(0, 240, 255, 0.2);
+    }
+    .ia-page h1 {
+      margin-top: 0;
+      color: var(--accent-neon);
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      font-size: 22px;
+    }
+    .ia-page h2 {
+      margin: 28px 0 8px;
+      color: var(--accent);
+      font-size: 16px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    .ia-page p, .ia-page li { color: #d5e6f2; }
+    .ia-page a { color: var(--accent); }
+    .ia-numeros {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 12px;
+      margin: 12px 0;
+    }
+    .ia-numero {
+      padding: 14px;
+      border: 1px solid rgba(0, 240, 255, 0.25);
+      border-left: 3px solid var(--accent);
+      background: rgba(5, 8, 12, 0.6);
+    }
+    .ia-numero strong {
+      display: block;
+      color: #fff;
+      font-size: 26px;
+    }
+    .ia-numero span { color: var(--muted); font-size: 13px; }
+    .ia-aviso {
+      padding: 12px 14px;
+      border: 1px solid var(--accent-strong);
+      background: rgba(255, 0, 85, 0.06);
+    }
+  </style>
+</head>
+<body>
+  <main class="ia-page">
+    <h1>Como funciona a IA do site</h1>
+    <p>
+      O site tem duas funções que usam um modelo de inteligência artificial treinado só com as
+      decisões deste acervo. Ele roda no seu navegador: nada do que você digita é enviado para fora.
+    </p>
+
+    <h2>Casos semelhantes</h2>
+    <p>
+      Ao abrir uma decisão, o painel mostra as cinco decisões mais parecidas com ela e o resultado
+      de cada uma (deferido, indeferido, não conhecido...). Serve para achar rapidamente como casos
+      do mesmo tipo foram julgados.
+    </p>
+
+    <h2>Busca por significado</h2>
+    <p>
+      No seletor de modo de busca, escolha <strong>Significado (IA)</strong> e descreva o caso com
+      as suas palavras, por exemplo <em>“caixa de passagem do hidrômetro sem tampa no passeio”</em>.
+      A lista vem ordenada pela proximidade de assunto, mesmo que a decisão use outras palavras, e o
+      site indica a infração mais provável. Para achar um número de auto, um nome ou uma expressão
+      exata, continue usando os modos <strong>Expressão</strong> e <strong>Palavras</strong>.
+    </p>
+
+    <h2>O quanto dá para confiar</h2>
+    <p>
+      Antes de cada publicação, o modelo é testado em decisões que ele não viu durante o treino. O
+      gabarito é a infração registrada no SIF para o auto de cada decisão.
+    </p>
+    <div class="ia-numeros" id="ia-numeros">
+      <div class="ia-numero"><strong>—</strong><span>Carregando os números do modelo publicado</span></div>
+    </div>
+    <p id="ia-rodape" class="muted"></p>
+    <p class="ia-aviso">
+      <strong>É uma ferramenta de pesquisa, não de decisão.</strong> O modelo aponta decisões de
+      assunto parecido; ele não sabe se os fatos do seu caso são os mesmos, não conhece a legislação
+      e erra. O resultado dos casos semelhantes mostra como eles foram julgados, não como o seu
+      será. Leia sempre a decisão indicada.
+    </p>
+
+    <h2>Como ele aprende</h2>
+    <p>
+      O modelo é uma rede neural pequena. Ela recebe o texto da decisão e aprende a reconhecer a
+      infração do auto; no caminho, aprende a colocar perto umas das outras as decisões que tratam
+      do mesmo assunto. Ele é refeito do zero a cada atualização do acervo, então passa a conhecer
+      as decisões novas assim que elas entram no site. Ele não aprende com o que você pesquisa.
+    </p>
+
+    <p><a href="index.html">← Voltar para a busca</a></p>
+  </main>
+
+  <script src="ia.js"></script>
+  <script>
+    const pct = (valor) => `${Math.round(valor * 100)}%`;
+    IA.avaliacao()
+      .then((a) => {
+        if (!a.decisoes_de_teste) throw new Error("sem avaliação");
+        const itens = [
+          [pct(a.vizinhos_mesma_infracao_p5), `dos casos semelhantes tratam da mesma infração (ao acaso seriam ${pct(a.vizinhos_acaso_p5)})`],
+          [pct(a.acerto_infracao), `de acerto ao indicar a infração a partir do texto da decisão, entre ${a.infracoes_distintas} possíveis`],
+          [String(a.busca_narrativa_mrr10).replace(".", ","), "na busca a partir do relato do fiscal (1 = a primeira decisão da lista é sempre da mesma infração)"],
+        ];
+        document.querySelector("#ia-numeros").innerHTML = itens
+          .map(([valor, texto]) => `<div class="ia-numero"><strong>${valor}</strong><span>${texto}</span></div>`)
+          .join("");
+        document.querySelector("#ia-rodape").textContent =
+          `Modelo gerado em ${a.gerado_em}, com ${a.n_docs.toLocaleString("pt-BR")} decisões; testado em ` +
+          `${a.decisoes_de_teste.toLocaleString("pt-BR")} que ficaram fora do treino.`;
+      })
+      .catch(() => {
+        document.querySelector("#ia-numeros").innerHTML =
+          '<div class="ia-numero"><strong>—</strong><span>Números indisponíveis no momento.</span></div>';
+      });
+  </script>
+</body>
+</html>

@@ -20,7 +20,13 @@ const state = {
   loadingData: false,
   autosLocais: null,
   autosDrive: null,
+  iaInfracao: null,
+  iaTermos: 0,
 };
+
+// Busca por significado: só os mais próximos interessam; abaixo disso vira ruído.
+const IA_MAX_RESULTADOS = 200;
+const IA_SIMILARES = 5;
 
 const els = {
   stats: document.querySelector("#stats"),
@@ -48,6 +54,8 @@ const els = {
   previewLabel: document.querySelector("#preview-label"),
   showText: document.querySelector("#show-text"),
   showFile: document.querySelector("#show-file"),
+  similares: document.querySelector("#similares"),
+  iaHint: document.querySelector("#ia-hint"),
 };
 
 function escapeHtml(value = "") {
@@ -345,6 +353,8 @@ async function init() {
   await loadAutosManifest();
   if (await apiAvailable()) {
     state.mode = "api";
+    // A busca por significado ordena o acervo no navegador; no modo API ele não está em memória.
+    els.searchMode.querySelector('option[value="semantic"]')?.remove();
     const stats = await fetchJson("/api/stats");
     els.stats.textContent = `${stats.votos.toLocaleString("pt-BR")} votos · ${stats.autos.toLocaleString("pt-BR")} autos`;
   } else {
@@ -385,7 +395,19 @@ async function runSearch({ append = false, keepOffset = false } = {}) {
     const data = await fetchJson(searchUrl(fetchOffset));
     state.total = data.total;
     state.items = append ? [...state.items, ...data.items.map(decorate)] : data.items.map(decorate);
+  } else if (state.searchMode === "semantic" && state.query) {
+    await loadStaticData();
+    const filtered = await semanticEntries();
+    state.total = filtered.length;
+    // Sem destaque de termos: aqui o que aproxima as decisões é o assunto, não as palavras.
+    const pageItems = filtered.slice(fetchOffset, fetchOffset + state.limit).map((entry) => ({
+      ...entry.record,
+      ia_similaridade: entry.score,
+      trecho: makeSnippet(entry.record, [], ""),
+    }));
+    state.items = append ? [...state.items, ...pageItems] : pageItems;
   } else {
+    state.iaInfracao = null;
     await loadStaticData();
     const terms = tokenize(state.query);
     const phrase = normalize(state.query).trim();
@@ -408,7 +430,41 @@ async function runSearch({ append = false, keepOffset = false } = {}) {
   renderResults();
 }
 
+// Ordena o acervo pela proximidade de significado com a consulta (modelo em ia.js).
+async function semanticEntries() {
+  const { ids, similaridades, infracao, termosConhecidos } = await IA.buscar(state.query);
+  state.iaInfracao = infracao;
+  state.iaTermos = termosConhecidos;
+  const entries = [];
+  for (let i = 0; i < ids.length; i += 1) {
+    const record = state.byId.get(ids[i]);
+    if (!record || similaridades[i] <= 0) continue;
+    if (state.instancia !== "todas" && record.instancia !== state.instancia) continue;
+    if (!dateFilterMatches(record)) continue;
+    entries.push({ record, score: similaridades[i] });
+  }
+  entries.sort((a, b) => b.score - a.score);
+  return entries.slice(0, IA_MAX_RESULTADOS);
+}
+
+function renderIaHint() {
+  const ativo = state.mode === "static" && state.searchMode === "semantic" && state.query;
+  els.iaHint.hidden = !ativo;
+  if (!ativo) return;
+  if (!state.iaTermos) {
+    els.iaHint.textContent = "IA: nenhum termo da consulta aparece no acervo. Descreva o caso com outras palavras.";
+    return;
+  }
+  const infracao = state.iaInfracao;
+  const provavel =
+    infracao && infracao.probabilidade >= 0.35
+      ? ` Infração provável: ${infracao.nome} (${Math.round(infracao.probabilidade * 100)}%).`
+      : "";
+  els.iaHint.innerHTML = `Ordenado por proximidade de significado.${escapeHtml(provavel)} <a href="ia.html" target="_blank">Como funciona</a>`;
+}
+
 function renderResults() {
+  renderIaHint();
   const shown = state.items.length;
   const endOfShown = state.offset + shown;
   els.resultCount.textContent = `${endOfShown.toLocaleString("pt-BR")} de ${state.total.toLocaleString("pt-BR")} resultados`;
@@ -443,7 +499,9 @@ function renderResults() {
       return `
         <button class="result${active}" type="button" data-file-id="${escapeHtml(item.file_id)}">
           <span class="result-title">${escapeHtml(item.nome_arquivo)}</span>
-          <span class="result-meta">${escapeHtml(item.decisao_instancia)} · ${escapeHtml(item.protocolo || "sem protocolo")}</span>
+          <span class="result-meta">${escapeHtml(item.decisao_instancia)} · ${escapeHtml(item.protocolo || "sem protocolo")}${
+            item.ia_similaridade ? ` · similaridade ${Math.round(item.ia_similaridade * 100)}%` : ""
+          }</span>
           <span class="result-snippet">${state.mode === "api" ? snippetHtml(item.trecho || "") : item.trecho || ""}</span>
           <span class="result-autos">${autos || '<span class="chip">sem auto</span>'}</span>
         </button>
@@ -491,7 +549,72 @@ function renderDetail() {
     els.openFile.textContent = "Sem arquivo público";
   }
   els.autos.innerHTML = renderAutos(item.autos || []);
+  renderSimilares(item);
   renderPreview();
+}
+
+async function recordById(fileId) {
+  const local = state.byId.get(fileId);
+  if (local) return local;
+  if (state.mode !== "api") return null;
+  try {
+    return decorate(await fetchJson(`/api/voto/${encodeURIComponent(fileId)}`));
+  } catch {
+    return null;
+  }
+}
+
+// Casos semelhantes: vizinhos mais próximos no espaço aprendido pelo modelo (ia.js).
+// Se os arquivos da IA não existirem, o bloco simplesmente não aparece.
+async function renderSimilares(item) {
+  els.similares.hidden = true;
+  els.similares.innerHTML = "";
+  let vizinhos;
+  try {
+    vizinhos = await IA.semelhantes(item.file_id, IA_SIMILARES);
+  } catch {
+    return;
+  }
+  const registros = await Promise.all(vizinhos.map((vizinho) => recordById(vizinho.id)));
+  if (state.selected?.file_id !== item.file_id) return;
+  const linhas = vizinhos
+    .map((vizinho, i) => ({ ...vizinho, record: registros[i] }))
+    .filter((vizinho) => vizinho.record);
+  if (!linhas.length) return;
+
+  const contagem = new Map();
+  for (const linha of linhas) {
+    if (linha.resultado) contagem.set(linha.resultado, (contagem.get(linha.resultado) || 0) + 1);
+  }
+  const resumo = [...contagem].map(([resultado, n]) => `${n} ${resultado}`).join(" · ");
+  // A infração só aparece na linha quando é diferente da decisão aberta; repetir não informa nada.
+  const infracaoDe = (record) => (record.autos?.[0]?.infracao || "").toLocaleUpperCase("pt-BR");
+  const infracaoAtual = infracaoDe(item);
+  els.similares.innerHTML = `
+    <div class="similares-head">
+      <strong>Casos semelhantes</strong>
+      <span class="badge">IA</span>
+      <span class="similares-resumo">${escapeHtml(resumo)}</span>
+      <a href="ia.html" target="_blank">Como funciona</a>
+    </div>
+    ${linhas
+      .map(
+        (linha) => `
+      <button class="similar" type="button" data-file-id="${escapeHtml(linha.id)}">
+        <span class="similar-title">${escapeHtml(linha.record.nome_arquivo)}</span>
+        <span class="similar-meta">${escapeHtml(linha.record.decisao_instancia)}${
+          linha.resultado ? ` · <b>${escapeHtml(linha.resultado)}</b>` : ""
+        }</span>
+        ${
+          infracaoDe(linha.record) && infracaoDe(linha.record) !== infracaoAtual
+            ? `<span class="similar-infracao">${escapeHtml(infracaoDe(linha.record))}</span>`
+            : ""
+        }
+      </button>`
+      )
+      .join("")}
+  `;
+  els.similares.hidden = false;
 }
 
 function renderAutos(autos = []) {
@@ -626,6 +749,12 @@ els.year.addEventListener("change", () => {
 });
 
 els.results.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-file-id]");
+  if (!button) return;
+  selectVoto(button.dataset.fileId);
+});
+
+els.similares.addEventListener("click", (event) => {
   const button = event.target.closest("[data-file-id]");
   if (!button) return;
   selectVoto(button.dataset.fileId);

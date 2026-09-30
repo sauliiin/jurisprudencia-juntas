@@ -6,3 +6,5 @@ lxml
 pdfplumber
 requests
 docx2txt
+numpy
+scipy
