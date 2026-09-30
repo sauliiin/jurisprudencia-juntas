@@ -2,3 +2,5 @@
 * text=auto
 site_data/votos.jsonl text eol=lf -diff
 marco_atualizacao.json text eol=lf
+site_data/ia/*.bin binary
+site_data/ia/modelo.json text eol=lf -diff

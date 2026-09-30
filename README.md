@@ -218,6 +218,52 @@ Há também um servidor opcional em `site_server.py`, que usa `indice_busca.db`
 para busca via SQLite FTS. Ele é útil para desenvolvimento local, mas o site do
 GitHub Pages não depende dele.
 
+## IA Do Site (`treinar_ia.py`)
+
+O site tem duas funções de IA que rodam inteiramente no navegador, sem servidor e
+sem API externa:
+
+- **Casos semelhantes**: ao abrir uma decisão, mostra as cinco mais parecidas e o
+  resultado de cada uma.
+- **Busca por significado**: modo `Significado (IA)` do seletor de busca. A consulta
+  é descrita em linguagem comum e o site indica também a infração mais provável.
+
+O modelo é uma rede neural pequena, treinada do zero só com o acervo:
+
+```text
+texto -> TF-IDF -> camada de 128 dimensões -> infração do auto (gabarito do SIF)
+```
+
+A camada do meio é um espaço em que decisões sobre a mesma infração ficam
+próximas; é ela que alimenta as duas funções. O treino é feito em NumPy puro
+(entropia cruzada + Adam), leva cerca de um minuto e é determinístico.
+
+```bash
+python3 -u treinar_ia.py                  # avalia e gera site_data/ia/
+python3 -u treinar_ia.py --sem-avaliacao  # só regenera o modelo
+```
+
+Antes de gerar o modelo final, o script treina em 80% das decisões rotuladas e
+mede nas 20% restantes. Na última execução (1.802 decisões de teste, 204 infrações):
+
+| Métrica | Resultado |
+|---|---|
+| Casos semelhantes com a mesma infração (precisão@5) | 81% (ao acaso: 4%) |
+| Acerto da infração a partir do texto da decisão | 86% |
+| Busca a partir do relato do fiscal (MRR@10) | 0,60 |
+
+Os números ficam em `site_data/ia/modelo.json` e aparecem em
+`site_publico/ia.html`, a página que explica a função para quem usa o site.
+
+Arquivos gerados em `site_data/ia/` (5,5 MB, pesos compactados em 8 bits):
+`modelo.json`, `termos.bin`, `docs.bin`, `vizinhos.bin`, `resultados.bin` e
+`classificador.bin`. O navegador só baixa os maiores quando alguém usa a busca
+por significado. O código do navegador está em `site_publico/ia.js`; o
+tokenizador de lá precisa continuar idêntico ao de `treinar_ia.py`.
+
+O `atualizar_tudo.sh` retreina o modelo a cada atualização: é assim que ele passa
+a conhecer as decisões novas. Ele não aprende com as buscas dos visitantes.
+
 ## Acervo Público
 
 Pasta canônica para o site de busca. Diferente de `pdfs_por_lei_e_ato/`, ela
@@ -363,9 +409,9 @@ fica ignorado pelo Git.
 ## Atualização Completa (`atualizar_tudo.sh`)
 
 Para não rodar cada script manualmente, `atualizar_tudo.sh` executa em sequência
-a atualização incremental de votos, links públicos e pareceres, e no final já
-publica (`git add` + `commit` + `push`) as mudanças em `site_data/*.jsonl` e
-`marco_atualizacao.json`:
+a atualização incremental de votos, links públicos e pareceres, retreina a IA do
+site e no final já publica (`git add` + `commit` + `push`) as mudanças em `site_data/*.jsonl`,
+`site_data/ia/` e `marco_atualizacao.json`:
 
 ```bash
 ./atualizar_tudo.sh
