@@ -10,10 +10,21 @@
 //
 // Os dois primeiros binários são pequenos e bastam para "casos semelhantes"; os
 // demais só são baixados quando alguém usa a busca por significado.
+//
+// Legislação (modo Legislação), no mesmo espaço do modelo:
+//   legislacao.json          ids dos artigos/itens vigentes, citações e métricas
+//   legislacao_vizinhos.bin  Uint16 [n x n_vizinhos]  artigos semelhantes, já calculados
+//   legislacao_docs.bin      Int8   [n x dim]          vetor de cada artigo
 const IA = (() => {
-  const BASE = "../site_data/ia/";
+  // Relativo a este arquivo, para servir tanto site_publico/ quanto site_publico/legislacao/.
+  const BASE =
+    typeof document !== "undefined" && document.currentScript
+      ? new URL("../site_data/ia/", document.currentScript.src).href
+      : "../site_data/ia/";
   let leve = null;
   let completo = null;
+  let legislacao = null;
+  let legislacaoVetores = null;
 
   async function binario(nome, Tipo) {
     const resposta = await fetch(BASE + nome);
@@ -54,6 +65,36 @@ const IA = (() => {
       throw erro;
     });
     return completo;
+  }
+
+  function carregarLegislacao() {
+    legislacao ??= (async () => {
+      const resposta = await fetch(BASE + "legislacao.json");
+      if (!resposta.ok) throw new Error(`IA indisponível (legislacao.json: HTTP ${resposta.status})`);
+      const modelo = await resposta.json();
+      const vizinhos = await binario("legislacao_vizinhos.bin", Uint16Array);
+      const indice = new Map(modelo.ids.map((id, i) => [id, i]));
+      return { modelo, vizinhos, indice };
+    })().catch((erro) => {
+      legislacao = null;
+      throw erro;
+    });
+    return legislacao;
+  }
+
+  function carregarLegislacaoVetores() {
+    legislacaoVetores ??= (async () => {
+      const [leg, m, docs] = await Promise.all([
+        carregarLegislacao(),
+        carregarCompleto(),
+        binario("legislacao_docs.bin", Int8Array),
+      ]);
+      return { leg, m, docs };
+    })().catch((erro) => {
+      legislacaoVetores = null;
+      throw erro;
+    });
+    return legislacaoVetores;
   }
 
   // Precisa ser idêntico ao tokenizador de treinar_ia.py: minúsculas, sem acentos,
@@ -143,12 +184,64 @@ const IA = (() => {
     return saida;
   }
 
+  /** Similaridade da consulta com cada artigo/item vigente da legislação, na ordem de ids. */
+  async function buscarLegislacao(texto) {
+    const { leg, m, docs } = await carregarLegislacaoVetores();
+    const { dim, n_docs: n } = leg.modelo;
+    const { vetor, termosConhecidos } = vetorizar(m, texto);
+    let norma = 0;
+    for (let k = 0; k < dim; k += 1) norma += vetor[k] * vetor[k];
+    norma = Math.sqrt(norma);
+    const similaridades = new Float32Array(n);
+    if (norma) {
+      for (let i = 0; i < n; i += 1) {
+        const base = i * dim;
+        let soma = 0;
+        for (let k = 0; k < dim; k += 1) soma += docs[base + k] * vetor[k];
+        similaridades[i] = soma / (127 * norma);
+      }
+    }
+    return { ids: leg.modelo.ids, similaridades, termosConhecidos };
+  }
+
+  /** Artigos mais próximos de um artigo da legislação: [id, ...]. */
+  async function artigosSemelhantes(id, quantos = 5) {
+    const { modelo, vizinhos, indice } = await carregarLegislacao();
+    const i = indice.get(id);
+    if (i === undefined) return [];
+    const k = modelo.n_vizinhos;
+    const saida = [];
+    for (let v = 0; v < Math.min(quantos, k); v += 1) saida.push(modelo.ids[vizinhos[i * k + v]]);
+    return saida;
+  }
+
+  /** Quantas decisões do acervo têm auto que cita o artigo (null se a IA não o conhece). */
+  async function citacoesDoArtigo(id) {
+    const { modelo, indice } = await carregarLegislacao();
+    const i = indice.get(id);
+    return i === undefined ? null : modelo.citacoes[i];
+  }
+
+  async function avaliacaoLegislacao() {
+    const { modelo } = await carregarLegislacao();
+    return { ...modelo.avaliacao, gerado_em: modelo.gerado_em, n_docs: modelo.n_docs };
+  }
+
   async function avaliacao() {
     const m = await carregarLeve();
     return { ...m.modelo.avaliacao, gerado_em: m.modelo.gerado_em, n_docs: m.modelo.n_docs };
   }
 
-  return { buscar, semelhantes, avaliacao, tokenizar };
+  return {
+    buscar,
+    semelhantes,
+    avaliacao,
+    tokenizar,
+    buscarLegislacao,
+    artigosSemelhantes,
+    citacoesDoArtigo,
+    avaliacaoLegislacao,
+  };
 })();
 
 if (typeof module !== "undefined") module.exports = IA;

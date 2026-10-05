@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="pt-BR">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Busca de Legislação</title>
+  <link rel="stylesheet" href="../styles.css" />
+  <link rel="stylesheet" href="../pareceres/styles.css" />
+</head>
+
+<!-- Mesma busca do modo Pareceres (../pareceres/app.js), com outro acervo, resultados
+     por artigo e a IA da legislação (../ia.js). -->
+<body data-acervo="../../site_data/legislacao.jsonl" data-documentos="arquivos" data-categorias="normas"
+  data-previa="text" data-ia="legislacao">
+  <main class="app-shell">
+    <header class="topbar">
+      <div class="brand">
+        <strong>Busca de Legislação</strong>
+        <span id="stats">Carregando acervo</span>
+      </div>
+      <nav style="display: flex; gap: 10px; margin-left: auto;">
+        <a href="https://drive.google.com/drive/folders/1YDlwa0MiwxSYp5H8YgRgQfdKc9hQhJph?usp=sharing" target="_blank" class="btn-nav-drive">DRIVE - Decisões p/ Lei</a>
+        <a href="https://drive.google.com/drive/folders/1k8K3eUxbiuRlLcRZhVXwx4fyr3P94zcZ?usp=sharing" target="_blank" class="btn-nav-drive">DRIVE - modelos</a>
+        <a href="../" class="btn-nav-decisoes">MODO DECISÕES</a>
+      </nav>
+      <form id="search-form" class="searchbar">
+        <input id="search-input" type="search" autocomplete="off"
+          placeholder="Buscar por texto, artigo, infração ou norma" />
+        <select id="category-filter" aria-label="Norma">
+          <option value="todas">Todas as normas</option>
+        </select>
+        <select id="search-mode" aria-label="Modo de busca">
+          <option value="phrase">Expressão</option>
+          <option value="words">Palavras</option>
+          <option value="semantic" selected>Significado (IA)</option>
+        </select>
+        <button type="submit">Buscar</button>
+      </form>
+    </header>
+
+    <section class="workspace">
+      <aside class="results-pane">
+        <div class="results-meta">
+          <span id="result-count">0 resultados</span>
+        </div>
+        <div id="ia-hint" class="ia-hint" hidden></div>
+        <div id="results" class="results-list" aria-live="polite"></div>
+        <div id="pagination-bar" class="pagination-bar" hidden>
+          <button id="page-prev" class="btn-neon" type="button" disabled>Anterior</button>
+          <span id="page-info">Página 1</span>
+          <button id="page-next" class="btn-neon" type="button">Próxima</button>
+        </div>
+      </aside>
+
+      <section class="detail-pane">
+        <div id="empty-state" class="empty-state">
+          <strong>Selecione um artigo</strong>
+          <span>A prévia aparecerá aqui.</span>
+        </div>
+
+        <article id="detail" class="detail" hidden>
+          <div class="detail-head">
+            <div>
+              <span id="detail-category" class="badge"></span>
+              <h1 id="detail-title"></h1>
+              <p id="detail-subtitle"></p>
+            </div>
+            <a id="open-file" class="open-button" target="_blank" rel="noreferrer">Abrir inteiro</a>
+          </div>
+
+          <section id="similares" class="similares" hidden></section>
+
+          <div class="preview-toolbar">
+            <span id="preview-label"></span>
+            <button id="show-text" class="subtle" type="button">Texto</button>
+            <button id="show-file" class="subtle" type="button">Arquivo</button>
+          </div>
+
+          <div id="preview" class="preview"></div>
+        </article>
+      </section>
+    </section>
+  </main>
+
+  <script src="../ia.js" defer></script>
+  <script src="../pareceres/app.js" defer></script>
+</body>
+
+</html>
