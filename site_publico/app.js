@@ -6,7 +6,10 @@ const state = {
   mode: "static",
   query: "",
   instancia: "todas",
-  searchMode: "phrase",
+  // Significado (IA) é o padrão; ver modoEfetivo para quando a busca cai em Expressão.
+  searchMode: document.querySelector("#search-mode").value,
+  modoEfetivo: "phrase",
+  iaRecurso: "",
   month: "",
   year: "",
   offset: 0,
@@ -162,7 +165,7 @@ function scoreRecord(record, terms, phrase) {
   const autos = normalize((record.autos || []).map((auto) => Object.values(auto).join(" ")).join(" "));
   const blob = searchBlob(record);
   let score = 0;
-  if (state.searchMode === "phrase") {
+  if (state.modoEfetivo === "phrase") {
     if (!blob.includes(phrase)) return 0;
     if (title.includes(phrase)) score += 30;
     if (subject.includes(phrase)) score += 22;
@@ -189,7 +192,7 @@ function makeSnippet(record, terms, phrase) {
   const source = record.assunto || record.texto || record.nome_arquivo || "";
   if (!terms.length) return escapeHtml(source.slice(0, 360));
   const normalized = normalize(source);
-  let index = state.searchMode === "phrase" ? normalized.indexOf(phrase) : -1;
+  let index = state.modoEfetivo === "phrase" ? normalized.indexOf(phrase) : -1;
   if (index === -1) {
     for (const term of terms) {
       index = normalized.indexOf(term);
@@ -199,7 +202,23 @@ function makeSnippet(record, terms, phrase) {
   const start = Math.max(index - 130, 0);
   const raw = source.slice(start, start + 420);
   const prefix = start > 0 ? "..." : "";
-  return prefix + highlight(raw, terms);
+  return prefix + highlight(raw, highlightNeedles(terms));
+}
+
+// O que marcar no texto: a expressão inteira (Expressão), cada palavra (Palavras) ou,
+// na busca por significado, só as palavras de 4+ letras da consulta. Termo a termo,
+// "mesas e cadeiras" marcaria cada "e" do texto.
+function highlightNeedles(terms) {
+  if (!terms.length) return terms;
+  if (state.modoEfetivo === "semantic") return terms.filter((term) => term.length >= 4);
+  if (state.modoEfetivo === "phrase") return [normalize(state.query).trim()];
+  return terms;
+}
+
+// A IA só lê palavras: consulta com número (auto, protocolo, artigo) vai direto
+// para a busca por expressão, e a sem nenhum termo conhecido pela IA também.
+function pedeExpressao(query) {
+  return /\d/.test(query);
 }
 
 function fillYearFilter(records) {
@@ -355,6 +374,7 @@ async function init() {
     state.mode = "api";
     // A busca por significado ordena o acervo no navegador; no modo API ele não está em memória.
     els.searchMode.querySelector('option[value="semantic"]')?.remove();
+    state.searchMode = els.searchMode.value;
     const stats = await fetchJson("/api/stats");
     els.stats.textContent = `${stats.votos.toLocaleString("pt-BR")} votos · ${stats.autos.toLocaleString("pt-BR")} autos`;
   } else {
@@ -391,13 +411,29 @@ async function runSearch({ append = false, keepOffset = false } = {}) {
     fetchOffset = state.offset + state.items.length;
   }
 
+  let semantic = state.mode === "static" && state.searchMode === "semantic" && state.query;
+  let semanticFiltered = null;
+  state.iaRecurso = "";
+  if (semantic && pedeExpressao(state.query)) {
+    semantic = false;
+    state.iaRecurso = "numero";
+  }
+  if (semantic) {
+    await loadStaticData();
+    semanticFiltered = await semanticEntries();
+    if (!state.iaTermos) {
+      semantic = false;
+      state.iaRecurso = "desconhecido";
+    }
+  }
+  state.modoEfetivo = semantic ? "semantic" : state.searchMode === "semantic" ? "phrase" : state.searchMode;
+
   if (state.mode === "api") {
     const data = await fetchJson(searchUrl(fetchOffset));
     state.total = data.total;
     state.items = append ? [...state.items, ...data.items.map(decorate)] : data.items.map(decorate);
-  } else if (state.searchMode === "semantic" && state.query) {
-    await loadStaticData();
-    const filtered = await semanticEntries();
+  } else if (semantic) {
+    const filtered = semanticFiltered;
     state.total = filtered.length;
     // Sem destaque de termos: aqui o que aproxima as decisões é o assunto, não as palavras.
     const pageItems = filtered.slice(fetchOffset, fetchOffset + state.limit).map((entry) => ({
@@ -451,8 +487,11 @@ function renderIaHint() {
   const ativo = state.mode === "static" && state.searchMode === "semantic" && state.query;
   els.iaHint.hidden = !ativo;
   if (!ativo) return;
-  if (!state.iaTermos) {
-    els.iaHint.textContent = "IA: nenhum termo da consulta aparece no acervo. Descreva o caso com outras palavras.";
+  if (state.iaRecurso) {
+    els.iaHint.textContent =
+      state.iaRecurso === "numero"
+        ? "Consulta com número: resultados da busca por expressão exata."
+        : "A IA não conhece os termos da consulta: resultados da busca por expressão exata.";
     return;
   }
   const infracao = state.iaInfracao;
@@ -683,11 +722,11 @@ function renderPreview() {
   const item = state.selected;
   if (!item) return;
 
-  const terms = tokenize(state.query);
+  const needles = highlightNeedles(tokenize(state.query));
   const isFilePreview = state.previewMode === "file";
   els.showFile.classList.toggle("active", isFilePreview);
   els.showText.classList.toggle("active", !isFilePreview);
-  els.showText.textContent = terms.length ? "Texto com destaques" : "Texto";
+  els.showText.textContent = needles.length ? "Texto com destaques" : "Texto";
   els.showFile.disabled = !item.tem_arquivo_publico;
   els.previewLabel.textContent = `${(item.ext || "arquivo").toUpperCase()} · ${previewKindLabel(item)} · ${autosLabel(item.autos || [])}`;
 
@@ -703,10 +742,10 @@ function renderPreview() {
   } else if (prefersTextPreview(item)) {
     notice = "Prévia textual extraída do Word/texto. Use “Abrir inteiro” para ver o arquivo original no Drive.\n\n";
   }
-  if (terms.length) {
+  if (needles.length) {
     notice += "Termos da busca destacados em amarelo.\n\n";
   }
-  els.preview.innerHTML = `<div class="text-preview">${escapeHtml(notice)}${highlight(text, terms)}</div>`;
+  els.preview.innerHTML = `<div class="text-preview">${escapeHtml(notice)}${highlight(text, needles)}</div>`;
   scrollToFirstHighlight();
 }
 

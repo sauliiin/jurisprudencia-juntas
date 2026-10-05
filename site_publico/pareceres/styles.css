@@ -20,3 +20,35 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Legislação: o texto completo da norma rola dentro da caixa, para o artigo
+   aparecer sem esconder o cabeçalho e os artigos semelhantes. */
+body[data-ia="legislacao"] .text-preview {
+  height: calc(100vh - 330px);
+  min-height: 320px;
+  overflow: auto;
+}
+
+/* Legislação: o artigo aberto, dentro do texto completo da norma. */
+.dispositivo-atual {
+  margin: 12px -10px;
+  padding: 10px;
+  border-left: 3px solid var(--accent-strong);
+  background: rgba(255, 0, 85, 0.07);
+}
+
+/* Redação revogada (riscada no original). */
+s.revogado {
+  color: var(--muted);
+  text-decoration-color: rgba(255, 0, 85, 0.7);
+}
+
+/* No bloco de artigos semelhantes, o começo do texto do artigo. */
+.similar .similar-infracao {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

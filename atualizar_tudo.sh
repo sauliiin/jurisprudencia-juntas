@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Atualiza o acervo público (votos organizados por lei/ato + pareceres) e
+# Atualiza o acervo público (votos organizados por lei/ato, pareceres e legislação) e
 # publica no site: baixa só o que é novo, reexporta os JSONL do site, retreina a
 # IA do site e envia (git add/commit/push) as mudanças em site_data/ e
 # marco_atualizacao.json.
@@ -21,15 +21,15 @@ fi
 
 PASTA_PUBLICA_VOTOS="1LW-tLhZfsc8l1-vBFqrFK86rtuUPIDer"
 
-echo "== 1/5 Organizando votos por lei/ato (baixar_e_organizar_por_ato.py) =="
+echo "== 1/6 Organizando votos por lei/ato (baixar_e_organizar_por_ato.py) =="
 python3 -u baixar_e_organizar_por_ato.py --continuar
 
 echo
-echo "== 2/5 Atualizando acervo público de votos (preparar_acervo_publico.py) =="
+echo "== 2/6 Atualizando acervo público de votos (preparar_acervo_publico.py) =="
 python3 -u preparar_acervo_publico.py --buscar-novos
 
 echo
-echo "== 3/5 Atualizando links públicos do Drive (atualizar_links_drive_publico.py) =="
+echo "== 3/6 Atualizando links públicos do Drive (atualizar_links_drive_publico.py) =="
 # Esse script retorna código 1 quando há arquivos ainda sem link público
 # (normal: eles continuam pesquisáveis até serem sincronizados com a pasta
 # pública). Não é motivo para abortar o restante da atualização.
@@ -42,11 +42,16 @@ if [ "$status" -ne 0 ]; then
 fi
 
 echo
-echo "== 4/5 Atualizando pareceres (preparar_pareceres.py) =="
+echo "== 4/6 Atualizando pareceres (preparar_pareceres.py) =="
 python3 -u preparar_pareceres.py
 
 echo
-echo "== 5/5 Retreinando a IA do site (treinar_ia.py) =="
+echo "== 5/6 Atualizando legislação (preparar_pareceres.py --legislacao) =="
+# Texto inteiro, filtro por norma, redação revogada marcada e divisão em artigos.
+python3 -u preparar_pareceres.py --legislacao
+
+echo
+echo "== 6/6 Retreinando a IA do site (treinar_ia.py) =="
 # O modelo é refeito com o acervo atualizado. Se falhar (ex.: numpy ausente), o site continua
 # funcionando com o modelo anterior; só os votos novos ficam fora dos "casos semelhantes".
 set +e
@@ -60,14 +65,14 @@ fi
 
 echo
 echo "== Publicando no Git =="
-git add site_data/votos.jsonl site_data/pareceres.jsonl marco_atualizacao.json site_data/ia
+git add site_data/votos.jsonl site_data/pareceres.jsonl site_data/legislacao.jsonl marco_atualizacao.json site_data/ia
 
 if git diff --cached --quiet; then
   echo "Nada novo para publicar (nenhuma mudança em site_data/ ou marco_atualizacao.json)."
   exit 0
 fi
 
-git commit -m "Atualiza acervo público: votos e pareceres ($(date '+%Y-%m-%d %H:%M'))"
+git commit -m "Atualiza acervo público: votos, pareceres e legislação ($(date '+%Y-%m-%d %H:%M'))"
 git push
 
 echo

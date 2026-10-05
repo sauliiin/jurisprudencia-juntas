@@ -66,8 +66,8 @@
   <main class="ia-page">
     <h1>Como funciona a IA do site</h1>
     <p>
-      O site tem duas funções que usam um modelo de inteligência artificial treinado só com as
-      decisões deste acervo. Ele roda no seu navegador: nada do que você digita é enviado para fora.
+      O site usa um modelo de inteligência artificial treinado só com as decisões deste acervo, nas
+      decisões e na legislação. Ele roda no seu navegador: nada do que você digita é enviado para fora.
     </p>
 
     <h2>Casos semelhantes</h2>
@@ -79,11 +79,12 @@
 
     <h2>Busca por significado</h2>
     <p>
-      No seletor de modo de busca, escolha <strong>Significado (IA)</strong> e descreva o caso com
-      as suas palavras, por exemplo <em>“caixa de passagem do hidrômetro sem tampa no passeio”</em>.
+      <strong>Significado (IA)</strong> é o modo de busca padrão: descreva o caso com as suas
+      palavras, por exemplo <em>“caixa de passagem do hidrômetro sem tampa no passeio”</em>.
       A lista vem ordenada pela proximidade de assunto, mesmo que a decisão use outras palavras, e o
-      site indica a infração mais provável. Para achar um número de auto, um nome ou uma expressão
-      exata, continue usando os modos <strong>Expressão</strong> e <strong>Palavras</strong>.
+      site indica a infração mais provável. A IA não lê números: uma consulta com número de auto,
+      protocolo ou artigo vai sozinha para a busca por expressão exata. Para achar um nome ou uma
+      expressão exata, escolha os modos <strong>Expressão</strong> ou <strong>Palavras</strong>.
     </p>
 
     <h2>O quanto dá para confiar</h2>
@@ -97,10 +98,33 @@
     <p id="ia-rodape" class="muted"></p>
     <p class="ia-aviso">
       <strong>É uma ferramenta de pesquisa, não de decisão.</strong> O modelo aponta decisões de
-      assunto parecido; ele não sabe se os fatos do seu caso são os mesmos, não conhece a legislação
-      e erra. O resultado dos casos semelhantes mostra como eles foram julgados, não como o seu
+      assunto parecido; ele não sabe se os fatos do seu caso são os mesmos, não interpreta a
+      legislação e erra. O resultado dos casos semelhantes mostra como eles foram julgados, não como o seu
       será. Leia sempre a decisão indicada.
     </p>
+
+    <h2>Na legislação</h2>
+    <p>
+      No modo Legislação, cada artigo (e cada item das tabelas de penalidades) é um resultado. Com
+      <strong>Significado (IA)</strong>, descreva o fato, por exemplo <em>“bar colocou mesas e cadeiras
+      na calçada sem licença”</em>, e a lista traz os artigos vigentes mais próximos, mesmo que usem
+      outras palavras. Ao abrir um artigo, <strong>Artigos semelhantes</strong> mostra os mais
+      parecidos, em geral o artigo do decreto que regulamenta a lei e o item da tabela de penalidades,
+      e quantas decisões do acervo têm auto que cita aquele artigo.
+    </p>
+    <p>
+      O modelo é o mesmo das decisões. Cada artigo entra nele pelo próprio texto somado às decisões
+      cujos autos o citam no “dispositivo legal transgredido”, e por isso fica perto das infrações em
+      que é aplicado. A redação revogada (riscada no original) continua pesquisável por palavras, mas
+      fica fora da busca por significado e dos semelhantes.
+    </p>
+    <p>
+      O teste usa as mesmas decisões fora do treino: a partir do texto delas, o artigo citado no auto
+      aparece entre os cinco primeiros?
+    </p>
+    <div class="ia-numeros" id="ia-numeros-legislacao">
+      <div class="ia-numero"><strong>—</strong><span>Carregando os números da legislação</span></div>
+    </div>
 
     <h2>Como ele aprende</h2>
     <p>
@@ -133,6 +157,22 @@
       })
       .catch(() => {
         document.querySelector("#ia-numeros").innerHTML =
+          '<div class="ia-numero"><strong>—</strong><span>Números indisponíveis no momento.</span></div>';
+      });
+    IA.avaliacaoLegislacao()
+      .then((a) => {
+        if (!a.consultas_relato) throw new Error("sem avaliação");
+        const itens = [
+          [pct(a.relato_top5), `das vezes o artigo citado no auto está entre os 5 primeiros, buscando pelo relato do fiscal (só por palavras: ${pct(a.relato_top5_so_palavras)})`],
+          [pct(a.infracao_top5), "das vezes, buscando pela descrição da infração no auto"],
+          [a.n_docs.toLocaleString("pt-BR"), "artigos e itens vigentes na busca por significado e nos semelhantes"],
+        ];
+        document.querySelector("#ia-numeros-legislacao").innerHTML = itens
+          .map(([valor, texto]) => `<div class="ia-numero"><strong>${valor}</strong><span>${texto}</span></div>`)
+          .join("");
+      })
+      .catch(() => {
+        document.querySelector("#ia-numeros-legislacao").innerHTML =
           '<div class="ia-numero"><strong>—</strong><span>Números indisponíveis no momento.</span></div>';
       });
   </script>

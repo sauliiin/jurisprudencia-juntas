@@ -184,7 +184,10 @@ usa o preview público do Google Drive.
 
 O site permite:
 
-- busca por expressão, que é o padrão;
+- busca por significado (IA), que é o padrão nas Decisões e na Legislação; consulta
+  com número (auto, protocolo, artigo) ou sem termo conhecido pela IA cai
+  automaticamente na busca por expressão;
+- busca por expressão, padrão nos Pareceres;
 - busca por palavras, exigindo que todas estejam no documento;
 - destaque amarelo dos termos encontrados na prévia textual;
 - filtro por instância;
@@ -194,6 +197,38 @@ O site permite:
 - prévia de PDF pelo Drive;
 - prévia textual para `.doc`, `.docx`, `.txt` e `.rtf`;
 - botão `Abrir inteiro` apontando para o arquivo público no Drive.
+
+O botão de modo no topo alterna entre três buscas: Decisões (`site_publico/`) →
+Pareceres (`site_publico/pareceres/`) → Legislação (`site_publico/legislacao/`) →
+Decisões. Pareceres e Legislação usam o mesmo código (`site_publico/pareceres/app.js`)
+e os mesmos filtros: categoria e Expressão/Palavras, sem instância, mês e ano. A
+página da Legislação troca o acervo e os rótulos pelos atributos `data-*` do
+`<body>` e liga a IA da legislação (`data-ia`).
+
+## Legislação
+
+As leis, os decretos e as tabelas de penalidades ficam na pasta pública do Drive
+`1WUOuLv7-ddLERjUpNc7klpH9KjxNnzlm` e são indexados pelo mesmo
+`preparar_pareceres.py`, no modo `--legislacao`:
+
+```bash
+python3 -u preparar_pareceres.py --legislacao
+```
+
+Esse modo grava `site_data/legislacao.jsonl` com o texto inteiro de cada arquivo e:
+
+- **categoria = norma**, tirada do nome do arquivo (`lei10534_Anexo II...xls` entra
+  em `Lei 10.534`);
+- **redação revogada**: os textos "-atual" trazem a redação antiga riscada, seguida
+  da vigente. A extração passa pelo HTML do LibreOffice, que preserva o risco, e os
+  trechos riscados ficam em `riscado` (posições no texto). O site os mostra riscados;
+- **dispositivos**: o texto dividido em artigos (ou em itens, nas tabelas de
+  penalidades), com capítulo/seção e a marca de revogado. No site, cada dispositivo é
+  um resultado, e a prévia mostra o artigo destacado dentro da norma inteira.
+
+A leitura do HTML, a divisão em artigos e a leitura das citações dos autos ficam em
+`legislacao.py`. Arquivos editados no Drive são reindexados pela data de
+modificação, e os apagados saem do índice, nos pareceres e na legislação.
 
 Para testar localmente no mesmo modo estático do GitHub Pages:
 
@@ -220,13 +255,16 @@ GitHub Pages não depende dele.
 
 ## IA Do Site (`treinar_ia.py`)
 
-O site tem duas funções de IA que rodam inteiramente no navegador, sem servidor e
-sem API externa:
+O site tem funções de IA que rodam inteiramente no navegador, sem servidor e sem
+API externa:
 
 - **Casos semelhantes**: ao abrir uma decisão, mostra as cinco mais parecidas e o
   resultado de cada uma.
 - **Busca por significado**: modo `Significado (IA)` do seletor de busca. A consulta
   é descrita em linguagem comum e o site indica também a infração mais provável.
+- **Legislação**: `Significado (IA)` no modo Legislação acha os artigos vigentes
+  pelo fato descrito, e cada artigo aberto mostra os **artigos semelhantes** e em
+  quantas decisões do acervo ele é citado.
 
 O modelo é uma rede neural pequena, treinada do zero só com o acervo:
 
@@ -255,7 +293,24 @@ mede nas 20% restantes. Na última execução (1.802 decisões de teste, 204 inf
 Os números ficam em `site_data/ia/modelo.json` e aparecem em
 `site_publico/ia.html`, a página que explica a função para quem usa o site.
 
-Arquivos gerados em `site_data/ia/` (5,5 MB, pesos compactados em 8 bits):
+Na legislação, cada artigo vigente entra no mesmo espaço de 128 dimensões pelo
+próprio texto, somado à média das decisões cujos autos o citam no "dispositivo legal
+transgredido" (`LEI 9725/09 - ART. 31, DECRETO 13842/10, ARTS. 84...`, lido por
+`legislacao.py`). Assim o artigo fica perto das infrações em que é aplicado. O teste
+usa as mesmas decisões fora do treino: a partir do texto de cada uma, o artigo citado
+no auto aparece entre os cinco primeiros?
+
+| Consulta (decisões fora do treino) | Só palavras | Modelo, texto do artigo | Modelo + citações |
+|---|---|---|---|
+| Relato do fiscal (1.185 consultas) | 17% | 46% | 65% (MRR@10 0,51) |
+| Descrição da infração no auto (1.795) | 89% | 90% | 98% (MRR@10 0,87) |
+
+A coluna do meio foi medida durante o desenvolvimento, com a redação revogada ainda junto.
+Misturar a busca por palavras à do modelo não melhorou o resultado. A redação
+revogada fica fora da IA. Os arquivos são `legislacao.json` (ids e citações),
+`legislacao_docs.bin` e `legislacao_vizinhos.bin` (510 KB no total).
+
+Arquivos gerados em `site_data/ia/` (6 MB, pesos compactados em 8 bits):
 `modelo.json`, `termos.bin`, `docs.bin`, `vizinhos.bin`, `resultados.bin` e
 `classificador.bin`. O navegador só baixa os maiores quando alguém usa a busca
 por significado. O código do navegador está em `site_publico/ia.js`; o
@@ -409,7 +464,7 @@ fica ignorado pelo Git.
 ## Atualização Completa (`atualizar_tudo.sh`)
 
 Para não rodar cada script manualmente, `atualizar_tudo.sh` executa em sequência
-a atualização incremental de votos, links públicos e pareceres, retreina a IA do
+a atualização incremental de votos, links públicos, pareceres e legislação, retreina a IA do
 site e no final já publica (`git add` + `commit` + `push`) as mudanças em `site_data/*.jsonl`,
 `site_data/ia/` e `marco_atualizacao.json`:
 
@@ -574,6 +629,7 @@ Os artefatos locais ou sensíveis ficam fora do Git:
 - `votos_relatores_pdfs/`
 - `pdfs_por_lei_e_ato/`
 - `votos_brutos/`
+- `pareceres_brutos/` e `legislacao_brutos/`
 - `assuntos.csv`
 - `indice_busca.db`
 - `pipeline*_cache.db`

@@ -23,6 +23,14 @@ refeito com o acervo atual; é assim que ele "aprende" com as decisões novas.
 Antes de treinar o modelo final, o script separa 20% das decisões, treina nos
 outros 80% e mede a qualidade nas que ficaram de fora. Os números vão para
 site_data/ia/modelo.json e aparecem na página de instruções.
+
+Legislação (site_data/legislacao.jsonl, dividida em artigos por legislacao.py):
+cada artigo vigente vai para o mesmo espaço de 128 dimensões, somado à média das
+decisões cujos autos o citam no "dispositivo legal transgredido". Assim um artigo
+fica perto das infrações em que é aplicado, e não só das palavras que contém. Daí
+saem a busca por significado e os "artigos semelhantes" do modo Legislação. A
+medição usa o mesmo corte: a partir do relato do fiscal ou da descrição da
+infração de uma decisão nunca vista, o artigo citado no auto aparece no topo?
 """
 
 from __future__ import annotations
@@ -41,8 +49,11 @@ from pathlib import Path
 import numpy as np
 import scipy.sparse as sp
 
+from legislacao import chave_norma, citacoes
+
 RAIZ = Path(__file__).resolve().parent
 VOTOS = RAIZ / "site_data" / "votos.jsonl"
+LEGISLACAO = RAIZ / "site_data" / "legislacao.jsonl"
 SAIDA = RAIZ / "site_data" / "ia"
 
 DIM = 128
@@ -53,6 +64,9 @@ VIZINHOS = 8
 MAX_TERMOS = 30000
 MIN_DOCS_POR_INFRACAO = 5
 SEMENTE = 7
+# Peso da média das decisões que citam o artigo, somada ao vetor do próprio texto.
+# Medido em decisões nunca vistas: 1 equilibra a busca pelo relato e pela infração.
+PESO_CITACOES = 1.0
 
 # O tokenizador precisa ser idêntico ao de site_publico/ia.js: minúsculas, sem
 # acentos, caracteres não-ASCII descartados, só sequências de 3+ letras.
@@ -176,8 +190,125 @@ def vetores_de_documentos(x: sp.csr_matrix, w_q: np.ndarray) -> np.ndarray:
     return d
 
 
-def avaliar(votos, x, chaves, elegiveis, vocab_idx, idf, dim, epocas) -> dict:
-    """Treina em 80% das decisões rotuladas e mede nas 20% que ficaram de fora."""
+def carregar_legislacao() -> list[dict]:
+    """Artigos e itens vigentes da legislação, com a chave (norma, artigo) quando é artigo."""
+    if not LEGISLACAO.exists():
+        return []
+    unidades = []
+    with LEGISLACAO.open(encoding="utf-8") as fh:
+        for linha in fh:
+            if not linha.strip():
+                continue
+            doc = json.loads(linha)
+            norma = re.match(r"(Lei|Decreto) ([\d.]+)$", doc.get("categoria") or "")
+            texto = doc.get("texto") or ""
+            for u in doc.get("dispositivos") or []:
+                if u["revogado"]:
+                    continue
+                chave = (chave_norma(*norma.groups()), u["numero"]) if norma and u["tipo"] == "artigo" else None
+                unidades.append({
+                    "id": f"{doc['file_id']}#{u['id']}",
+                    "doc": doc["file_id"],
+                    "numero": u["numero"],
+                    "chave": chave,
+                    "texto": texto[u["inicio"] : u["fim"]],
+                })
+    return unidades
+
+
+def citacoes_por_decisao(votos: list[dict]) -> list[set]:
+    """Artigos citados nos autos de cada decisão (campo 'dispositivo legal transgredido')."""
+    return [
+        set().union(*(citacoes(a.get("dispositivo_legal_transgredido") or "") for a in v.get("autos") or []))
+        for v in votos
+    ]
+
+
+def vetores_legislacao(unidades, x_unid, citantes: dict, d: np.ndarray, w_q: np.ndarray) -> np.ndarray:
+    """Vetor do texto do artigo + PESO_CITACOES x média das decisões que o citam."""
+    u = vetores_de_documentos(x_unid, w_q)
+    for j, unidade in enumerate(unidades):
+        idx = citantes.get(unidade["chave"])
+        if idx:
+            media = d[idx].mean(axis=0)
+            u[j] += PESO_CITACOES * media / max(float(np.linalg.norm(media)), 1e-9)
+    u /= np.maximum(np.linalg.norm(u, axis=1, keepdims=True), 1e-9)
+    return u
+
+
+def _citantes(citadas: list[set], excluir: set[int] = frozenset()) -> dict:
+    saida = collections.defaultdict(list)
+    for i, chaves in enumerate(citadas):
+        if i not in excluir:
+            for chave in chaves:
+                saida[chave].append(i)
+    return saida
+
+
+def avaliar_legislacao(votos, teste, citadas, unidades, x_unid, d, w_q, vocab_idx, idf) -> dict:
+    """Do relato do fiscal (ou da descrição da infração) de uma decisão nunca vista,
+    o artigo citado no auto aparece entre os primeiros? Só artigos entram no ranking."""
+    artigos = [j for j, u in enumerate(unidades) if u["chave"]]
+    chaves_artigos = {unidades[j]["chave"] for j in artigos}
+    teste_set = set(teste)
+    u = vetores_legislacao(unidades, x_unid, _citantes(citadas, teste_set), d, w_q)[artigos]
+
+    # Comparação: busca por palavras (TF-IDF com o vocabulário dos próprios artigos).
+    tokens = [tokenizar(unidades[j]["texto"]) for j in artigos]
+    df = collections.Counter(t for tk in tokens for t in set(tk))
+    lex_idx = {t: n for n, t in enumerate(sorted(df))}
+    lex_idf = np.array([math.log((1 + len(tokens)) / (1 + df[t])) + 1 for t in sorted(df)], dtype=np.float32)
+    lex = tfidf(tokens, lex_idx, lex_idf)
+
+    def medir(consultas: list[tuple[int, str]], palavras: bool = False) -> tuple[float, float]:
+        textos = [tokenizar(t) for _, t in consultas]
+        if palavras:
+            sim = (tfidf(textos, lex_idx, lex_idf) @ lex.T).toarray()
+        else:
+            sim = vetores_de_documentos(tfidf(textos, vocab_idx, idf), w_q) @ u.T
+        acertos5 = rr = 0.0
+        for r, (i, _) in enumerate(consultas):
+            ordem = np.argsort(-sim[r])[:10]
+            pos = next((n for n, j in enumerate(ordem) if unidades[artigos[j]]["chave"] in citadas[i]), None)
+            if pos is not None:
+                rr += 1 / (pos + 1)
+                acertos5 += pos < 5
+        return round(acertos5 / len(consultas), 3), round(rr / len(consultas), 3)
+
+    infracoes, relatos = [], []
+    for i in teste:
+        if not citadas[i] & chaves_artigos:
+            continue
+        infracao = (votos[i]["autos"][0].get("infracao") or "").strip()
+        if infracao:
+            infracoes.append((i, infracao))
+        achado = _FISCAL.search(votos[i].get("texto") or "")
+        if achado:
+            consulta = _AUTO.sub("", achado.group(1))[:600]
+            if len(consulta) >= 60:
+                relatos.append((i, consulta))
+    if not infracoes or not relatos:
+        return {}
+    inf5, inf_mrr = medir(infracoes)
+    rel5, rel_mrr = medir(relatos)
+    rel5_palavras, _ = medir(relatos, palavras=True)
+    return {
+        "artigos": len(artigos),
+        "consultas_infracao": len(infracoes),
+        "infracao_top5": inf5,
+        "infracao_mrr10": inf_mrr,
+        "consultas_relato": len(relatos),
+        "relato_top5": rel5,
+        "relato_mrr10": rel_mrr,
+        "relato_top5_so_palavras": rel5_palavras,
+    }
+
+
+def avaliar(votos, x, chaves, elegiveis, vocab_idx, idf, dim, epocas, leg=None) -> tuple[dict, dict]:
+    """Treina em 80% das decisões rotuladas e mede nas 20% que ficaram de fora.
+
+    leg = (citadas, unidades, x_unid) mede também a legislação com o mesmo modelo.
+    """
     rng = random.Random(SEMENTE)
     embaralhados = elegiveis[:]
     rng.shuffle(embaralhados)
@@ -218,7 +349,7 @@ def avaliar(votos, x, chaves, elegiveis, vocab_idx, idf, dim, epocas) -> dict:
         ordem = np.argsort(-sim[r])[:10]
         chave = next(iter(chaves[i]))
         rr.append(next((1 / (n + 1) for n, j in enumerate(ordem) if chave in chaves[j]), 0.0))
-    return {
+    metricas = {
         "decisoes_de_teste": len(teste),
         "infracoes_distintas": len(classes),
         "vizinhos_mesma_infracao_p5": round(p5, 3),
@@ -227,6 +358,49 @@ def avaliar(votos, x, chaves, elegiveis, vocab_idx, idf, dim, epocas) -> dict:
         "busca_narrativa_mrr10": round(float(np.mean(rr)), 3),
         "consultas_narrativa": len(narrativas),
     }
+    metricas_leg = avaliar_legislacao(votos, teste, leg[0], leg[1], leg[2], d, w_q, vocab_idx, idf) if leg else {}
+    return metricas, metricas_leg
+
+
+def exportar_legislacao(unidades, x_unid, citadas, d, w_q, dim, metricas: dict) -> None:
+    """Grava os vetores da legislação e os artigos semelhantes já calculados."""
+    u = vetores_legislacao(unidades, x_unid, _citantes(citadas), d, w_q)
+    n = len(unidades)
+    k = min(VIZINHOS, n - 1)
+    vizinhos = np.zeros((n, k), dtype=np.uint16)
+    sim = u @ u.T
+    # Outra versão do mesmo item (outra aba da planilha) não conta como "semelhante".
+    mesma = {}
+    for j, unidade in enumerate(unidades):
+        mesma.setdefault((unidade["doc"], unidade["numero"]), []).append(j)
+    for grupo in mesma.values():
+        sim[np.ix_(grupo, grupo)] = -9
+    np.fill_diagonal(sim, -9)
+    top = np.argpartition(-sim, k, axis=1)[:, :k]
+    ordem = np.argsort(-np.take_along_axis(sim, top, axis=1), axis=1)
+    vizinhos[:] = np.take_along_axis(top, ordem, axis=1)
+
+    contagem = collections.Counter(chave for chaves in citadas for chave in chaves)
+    np.round(u * 127).astype(np.int8).tofile(SAIDA / "legislacao_docs.bin")
+    vizinhos.tofile(SAIDA / "legislacao_vizinhos.bin")
+    modelo = {
+        "versao": 1,
+        "gerado_em": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "dim": dim,
+        "n_docs": n,
+        "n_vizinhos": k,
+        "ids": [unidade["id"] for unidade in unidades],
+        # Decisões do acervo cujos autos citam o artigo (0 para itens de tabela).
+        "citacoes": [contagem.get(unidade["chave"], 0) if unidade["chave"] else 0 for unidade in unidades],
+        "avaliacao": metricas,
+    }
+    destino = SAIDA / "legislacao.json"
+    if destino.exists():
+        anterior = json.loads(destino.read_text(encoding="utf-8"))
+        if {**anterior, "gerado_em": ""} == {**modelo, "gerado_em": ""}:
+            modelo["gerado_em"] = anterior["gerado_em"]
+    destino.write_text(json.dumps(modelo, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    print(f"Legislação: {n} artigos/itens vigentes no espaço da IA", flush=True)
 
 
 def main() -> None:
@@ -259,13 +433,23 @@ def main() -> None:
         and contagem[next(iter(chaves[i]))] >= MIN_DOCS_POR_INFRACAO
     ]
 
+    unidades = carregar_legislacao()
+    citadas = citacoes_por_decisao(votos)
+    x_unid = tfidf([tokenizar(u["texto"]) for u in unidades], vocab_idx, idf) if unidades else None
+    leg = (citadas, unidades, x_unid) if unidades else None
+
     if args.sem_avaliacao:
         # Mantém os números da última medição em vez de publicar o modelo sem eles.
-        anterior = SAIDA / "modelo.json"
-        metricas = json.loads(anterior.read_text(encoding="utf-8")).get("avaliacao", {}) if anterior.exists() else {}
+        def anteriores(nome: str) -> dict:
+            arquivo = SAIDA / nome
+            return json.loads(arquivo.read_text(encoding="utf-8")).get("avaliacao", {}) if arquivo.exists() else {}
+
+        metricas, metricas_leg = anteriores("modelo.json"), anteriores("legislacao.json")
     else:
-        metricas = avaliar(votos, x, chaves, elegiveis, vocab_idx, idf, args.dim, args.epocas)
+        metricas, metricas_leg = avaliar(votos, x, chaves, elegiveis, vocab_idx, idf, args.dim, args.epocas, leg)
         print("Resultado em decisões nunca vistas:", json.dumps(metricas, ensure_ascii=False), flush=True)
+        if metricas_leg:
+            print("Legislação, a partir de decisões nunca vistas:", json.dumps(metricas_leg, ensure_ascii=False), flush=True)
 
     # Modelo final: mesmas configurações, agora com todas as decisões rotuladas.
     classes = sorted({next(iter(chaves[i])) for i in elegiveis})
@@ -312,6 +496,8 @@ def main() -> None:
         if {**anterior, "gerado_em": ""} == {**modelo, "gerado_em": ""}:
             modelo["gerado_em"] = anterior["gerado_em"]
     destino.write_text(json.dumps(modelo, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    if unidades:
+        exportar_legislacao(unidades, x_unid, citadas, d, w_q, args.dim, metricas_leg)
     tamanho = sum(f.stat().st_size for f in SAIDA.iterdir()) / 1e6
     print(f"Arquivos em {SAIDA.relative_to(RAIZ)}/ ({tamanho:.1f} MB) · {time.time() - inicio:.0f} s", flush=True)
 
