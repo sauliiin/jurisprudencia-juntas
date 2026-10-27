@@ -4,109 +4,286 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Busca de Decisões</title>
+  <title>OmniAI · Jurisprudência — busca de decisões administrativas com IA</title>
+  <meta name="description"
+    content="Busque mais de 12 mil decisões das Juntas Integradas de Julgamento Fiscal de Belo Horizonte por expressão, palavras ou significado, com IA que roda no navegador." />
+  <meta name="theme-color" content="#0f766e" />
+  <link rel="canonical" href="https://sauliiin.github.io/jurisprudencia-juntas/site_publico/" />
+  <meta property="og:type" content="website" />
+  <meta property="og:locale" content="pt_BR" />
+  <meta property="og:site_name" content="OmniAI · Jurisprudência" />
+  <meta property="og:title" content="OmniAI · Jurisprudência" />
+  <meta property="og:description"
+    content="Mais de 12 mil decisões administrativas de Belo Horizonte, pesquisáveis pelo sentido, com IA treinada do zero que roda no navegador." />
+  <meta property="og:url" content="https://sauliiin.github.io/jurisprudencia-juntas/site_publico/" />
+  <meta property="og:image" content="https://sauliiin.github.io/jurisprudencia-juntas/site_publico/assets/og.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="OmniAI · Jurisprudência: busca de decisões administrativas com IA" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="OmniAI · Jurisprudência" />
+  <meta name="twitter:description"
+    content="Mais de 12 mil decisões administrativas de Belo Horizonte, pesquisáveis pelo sentido, com IA no navegador." />
+  <meta name="twitter:image" content="https://sauliiin.github.io/jurisprudencia-juntas/site_publico/assets/og.png" />
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
+  <link rel="preload" href="assets/fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="styles.css" />
+  <script>
+    try {
+      const tema = localStorage.getItem("omniai-tema");
+      if (tema === "light" || tema === "dark") document.documentElement.dataset.theme = tema;
+    } catch {}
+  </script>
 </head>
 
-<body>
-  <main class="app-shell">
-    <header class="topbar">
-      <div class="brand">
-        <div style="display: flex; align-items: center; gap: 10px;">
-          <strong>Busca de Decisões</strong>
-          <a href="instrucoes.html" target="_blank" class="btn-help">
-            <span class="btn-help-icon">?</span>
-            <span class="btn-help-text">Instruções</span>
-          </a>
-        </div>
-        <span id="stats">Carregando acervo</span>
-      </div>
-      <nav style="display: flex; gap: 10px; margin-left: auto;">
-        <a href="https://drive.google.com/drive/folders/1YDlwa0MiwxSYp5H8YgRgQfdKc9hQhJph?usp=sharing" target="_blank" class="btn-nav-drive">DRIVE - Decisões p/ Lei</a>
-        <a href="https://drive.google.com/drive/folders/1k8K3eUxbiuRlLcRZhVXwx4fyr3P94zcZ?usp=sharing" target="_blank" class="btn-nav-drive">DRIVE - modelos</a>
-        <a href="pareceres/" class="btn-nav-pareceres">MODO PARECERES</a>
-      </nav>
-      <form id="search-form" class="searchbar">
-        <input id="search-input" type="search" autocomplete="off"
-          placeholder="Buscar por texto, auto, infração, local ou lei" />
-        <select id="instance-filter" aria-label="Instância">
-          <option value="todas">Todas</option>
-          <option value="1a_instancia">1ª instância</option>
-          <option value="2a_instancia">2ª instância</option>
-        </select>
-        <select id="search-mode" aria-label="Modo de busca">
-          <option value="phrase">Expressão</option>
-          <option value="words">Palavras</option>
-          <option value="semantic" selected>Significado (IA)</option>
-        </select>
-        <select id="month-filter" aria-label="Mês">
-          <option value="">Mês</option>
-          <option value="janeiro">Janeiro</option>
-          <option value="fevereiro">Fevereiro</option>
-          <option value="março">Março</option>
-          <option value="abril">Abril</option>
-          <option value="maio">Maio</option>
-          <option value="junho">Junho</option>
-          <option value="julho">Julho</option>
-          <option value="agosto">Agosto</option>
-          <option value="setembro">Setembro</option>
-          <option value="outubro">Outubro</option>
-          <option value="novembro">Novembro</option>
-          <option value="dezembro">Dezembro</option>
-        </select>
-        <select id="year-filter" aria-label="Ano">
-          <option value="">Ano</option>
-        </select>
-        <button type="submit">Buscar</button>
-      </form>
-    </header>
+<body class="app tem-home">
+  <a class="pular" href="#search-input">Pular para a busca</a>
 
-    <section class="workspace">
-      <aside class="results-pane">
+  <header class="topbar">
+    <a class="brand" href="./" aria-label="OmniAI · Jurisprudência, página inicial">
+      <span class="brand-mark" aria-hidden="true"><svg class="icon"><use href="assets/icones.svg#balanca" /></svg></span>
+      <span>OmniAI<span class="brand-sep"> · </span><span class="brand-produto">Jurisprudência</span></span>
+    </a>
+    <nav class="topnav" aria-label="Principal">
+      <div class="modos">
+        <a class="modo" href="./" aria-current="page">Decisões</a>
+        <a class="modo" href="pareceres/">Pareceres</a>
+        <a class="modo" href="legislacao/">Legislação</a>
+      </div>
+      <a class="nav-link" href="ia.html">Como funciona a IA</a>
+      <a class="nav-link" href="sobre.html">Sobre</a>
+    </nav>
+    <div class="topbar-acoes">
+      <details class="menu">
+        <summary class="icon-btn" aria-label="Mais opções">
+          <svg class="icon" aria-hidden="true"><use href="assets/icones.svg#mais" /></svg><span class="menu-rotulo">Mais</span>
+        </summary>
+        <div class="menu-painel">
+          <div class="so-mobile">
+            <a href="./"><svg class="icon" aria-hidden="true"><use href="assets/icones.svg#balanca" /></svg>Decisões</a>
+            <a href="pareceres/"><svg class="icon" aria-hidden="true"><use href="assets/icones.svg#pasta" /></svg>Pareceres</a>
+            <a href="legislacao/"><svg class="icon" aria-hidden="true"><use href="assets/icones.svg#livro" /></svg>Legislação</a>
+          </div>
+          <div class="so-medio">
+            <a href="ia.html"><svg class="icon" aria-hidden="true"><use href="assets/icones.svg#faisca" /></svg>Como funciona a IA</a>
+            <a href="sobre.html"><svg class="icon" aria-hidden="true"><use href="assets/icones.svg#info" /></svg>Sobre o projeto</a>
+            <div class="menu-sep"></div>
+          </div>
+          <div class="menu-titulo">Para quem vota nas Juntas</div>
+          <a href="https://drive.google.com/drive/folders/1YDlwa0MiwxSYp5H8YgRgQfdKc9hQhJph?usp=sharing" target="_blank" rel="noopener">
+            <svg class="icon" aria-hidden="true"><use href="assets/icones.svg#pasta" /></svg>Drive · Decisões por lei
+            <svg class="icon externo" aria-hidden="true"><use href="assets/icones.svg#externo" /></svg></a>
+          <a href="https://drive.google.com/drive/folders/1k8K3eUxbiuRlLcRZhVXwx4fyr3P94zcZ?usp=sharing" target="_blank" rel="noopener">
+            <svg class="icon" aria-hidden="true"><use href="assets/icones.svg#documento" /></svg>Drive · Modelos de voto
+            <svg class="icon externo" aria-hidden="true"><use href="assets/icones.svg#externo" /></svg></a>
+          <a href="instrucoes.html"><svg class="icon" aria-hidden="true"><use href="assets/icones.svg#info" /></svg>Instruções</a>
+          <a href="roteiro_voto.html"><svg class="icon" aria-hidden="true"><use href="assets/icones.svg#livro" /></svg>Roteiro para elaborar voto</a>
+          <a href="tutoriais.html"><svg class="icon" aria-hidden="true"><use href="assets/icones.svg#video" /></svg>Vídeos tutoriais</a>
+        </div>
+      </details>
+      <button class="icon-btn tema-toggle" type="button" aria-label="Alternar tema">
+        <svg class="icon icon-lua" aria-hidden="true"><use href="assets/icones.svg#lua" /></svg>
+        <svg class="icon icon-sol" aria-hidden="true"><use href="assets/icones.svg#sol" /></svg>
+      </button>
+    </div>
+  </header>
+
+  <section class="busca" aria-label="Busca de decisões">
+    <form id="search-form" class="searchbar" role="search">
+      <div class="campo-busca">
+        <svg class="icon" aria-hidden="true"><use href="assets/icones.svg#busca" /></svg>
+        <label class="sr-only" for="search-input">Buscar decisões</label>
+        <input id="search-input" type="search" autocomplete="off" enterkeyhint="search"
+          placeholder="Descreva o caso ou busque por auto, infração, lei…" />
+      </div>
+      <button class="btn filtros-toggle" type="button" aria-expanded="false" aria-controls="filtros">
+        <svg class="icon" aria-hidden="true"><use href="assets/icones.svg#filtros" /></svg>Filtros
+      </button>
+      <div id="filtros" class="filtros">
+        <label class="filtro"><span class="filtro-rotulo">Modo</span>
+          <select id="search-mode">
+            <option value="phrase">Expressão</option>
+            <option value="words">Palavras</option>
+            <option value="semantic" selected>Significado (IA)</option>
+          </select>
+        </label>
+        <label class="filtro"><span class="filtro-rotulo">Instância</span>
+          <select id="instance-filter">
+            <option value="todas">Todas</option>
+            <option value="1a_instancia">1ª instância</option>
+            <option value="2a_instancia">2ª instância</option>
+          </select>
+        </label>
+        <label class="filtro"><span class="filtro-rotulo">Mês</span>
+          <select id="month-filter">
+            <option value="">Todos</option>
+            <option value="janeiro">Janeiro</option>
+            <option value="fevereiro">Fevereiro</option>
+            <option value="março">Março</option>
+            <option value="abril">Abril</option>
+            <option value="maio">Maio</option>
+            <option value="junho">Junho</option>
+            <option value="julho">Julho</option>
+            <option value="agosto">Agosto</option>
+            <option value="setembro">Setembro</option>
+            <option value="outubro">Outubro</option>
+            <option value="novembro">Novembro</option>
+            <option value="dezembro">Dezembro</option>
+          </select>
+        </label>
+        <label class="filtro"><span class="filtro-rotulo">Ano</span>
+          <select id="year-filter">
+            <option value="">Todos</option>
+          </select>
+        </label>
+      </div>
+      <button class="btn btn-primary btn-buscar" type="submit">Buscar</button>
+    </form>
+    <p id="stats" class="busca-status" aria-live="polite">Carregando acervo…</p>
+  </section>
+
+  <main class="principal" id="conteudo">
+    <div id="home" class="home">
+      <section class="hero" aria-labelledby="home-titulo">
+        <div class="hero-inner">
+          <p class="eyebrow"><svg class="icon" aria-hidden="true"><use href="assets/icones.svg#faisca" /></svg>Busca por significado com IA no navegador</p>
+          <h1 id="home-titulo">Decisões administrativas de Belo Horizonte, encontradas pelo sentido.</h1>
+          <p class="hero-lead">
+            O acervo das Juntas Integradas de Julgamento Fiscal em um só lugar: descreva o caso com as suas palavras
+            ou busque por expressão exata, número de auto, infração ou lei.
+          </p>
+          <div class="exemplos">
+            <span class="exemplos-rotulo">Experimente:</span>
+            <button class="exemplo" type="button" data-busca="obra sem alvará"><svg class="icon" aria-hidden="true"><use href="assets/icones.svg#busca" /></svg>obra sem alvará</button>
+            <button class="exemplo" type="button" data-busca="passeio irregular"><svg class="icon" aria-hidden="true"><use href="assets/icones.svg#busca" /></svg>passeio irregular</button>
+            <button class="exemplo" type="button" data-busca="prazo para regularização"><svg class="icon" aria-hidden="true"><use href="assets/icones.svg#busca" /></svg>prazo para regularização</button>
+          </div>
+          <dl class="numeros">
+            <div class="numero"><dt>decisões</dt><dd id="num-votos">12.178</dd></div>
+            <div class="numero"><dt>autos de infração</dt><dd id="num-autos">14.732</dd></div>
+            <div class="numero"><dt>instâncias</dt><dd>1ª e 2ª</dd></div>
+          </dl>
+        </div>
+      </section>
+
+      <section class="home-secao home-ia" aria-labelledby="home-ia-titulo">
+        <div>
+          <p class="secao-rotulo">IA treinada do zero</p>
+          <h2 id="home-ia-titulo">Um modelo que aprendeu só com este acervo</h2>
+          <p>
+            Uma rede neural pequena, treinada com as próprias decisões, coloca perto umas das outras as que tratam do
+            mesmo assunto. Ela ordena a busca por significado e sugere casos semelhantes, e roda no seu navegador:
+            nada do que você digita sai do seu computador.
+          </p>
+          <a class="link-seta" href="ia.html">Como funciona a IA
+            <svg class="icon icon-sm" aria-hidden="true"><use href="assets/icones.svg#seta-direita" /></svg></a>
+        </div>
+        <div class="metricas">
+          <div class="metrica"><strong data-metrica="acerto_infracao">86%</strong><span>de acerto ao indicar a infração a partir do texto da decisão</span></div>
+          <div class="metrica"><strong data-metrica="vizinhos_mesma_infracao_p5">81%</strong><span>dos casos semelhantes tratam da mesma infração</span></div>
+        </div>
+      </section>
+
+      <section class="home-secao home-recursos" aria-labelledby="home-recursos-titulo">
+        <h2 id="home-recursos-titulo">Feito para quem pesquisa e vota</h2>
+        <div class="recursos">
+          <div class="recurso">
+            <span class="recurso-icone"><svg class="icon" aria-hidden="true"><use href="assets/icones.svg#busca" /></svg></span>
+            <h3>Três modos de busca</h3>
+            <p>Expressão exata, todas as palavras ou significado, com filtros por instância, mês e ano.</p>
+          </div>
+          <div class="recurso">
+            <span class="recurso-icone"><svg class="icon" aria-hidden="true"><use href="assets/icones.svg#camadas" /></svg></span>
+            <h3>Casos semelhantes</h3>
+            <p>Ao abrir uma decisão, as cinco mais parecidas e como cada uma foi julgada.</p>
+          </div>
+          <div class="recurso">
+            <span class="recurso-icone"><svg class="icon" aria-hidden="true"><use href="assets/icones.svg#escudo" /></svg></span>
+            <h3>Dados pessoais protegidos</h3>
+            <p>Nomes de autuados mascarados e caminhos internos removidos do acervo publicado.</p>
+          </div>
+        </div>
+      </section>
+
+      <footer class="rodape">
+        <div class="rodape-inner">
+          <span>OmniAI · Jurisprudência — projeto de Saulo Hugo Rossi</span>
+          <nav aria-label="Rodapé">
+            <a href="sobre.html">Sobre</a>
+            <a href="ia.html">Como funciona a IA</a>
+            <a href="instrucoes.html">Instruções</a>
+            <a href="https://drive.google.com/drive/folders/1YDlwa0MiwxSYp5H8YgRgQfdKc9hQhJph?usp=sharing" target="_blank" rel="noopener">Drive · Decisões por lei</a>
+            <a href="https://drive.google.com/drive/folders/1k8K3eUxbiuRlLcRZhVXwx4fyr3P94zcZ?usp=sharing" target="_blank" rel="noopener">Drive · Modelos</a>
+            <a href="https://github.com/sauliiin/jurisprudencia-juntas" target="_blank" rel="noopener">GitHub</a>
+          </nav>
+        </div>
+      </footer>
+    </div>
+
+    <div class="workspace">
+      <section class="results-pane" aria-label="Resultados">
         <div class="results-meta">
-          <span id="result-count">0 resultados</span>
+          <span id="result-count" aria-live="polite">0 resultados</span>
         </div>
         <div id="ia-hint" class="ia-hint" hidden></div>
-        <div id="results" class="results-list" aria-live="polite"></div>
-        <div id="pagination-bar" class="pagination-bar" hidden>
-          <button id="page-prev" class="btn-neon" type="button" disabled>Anterior</button>
+        <div id="results" class="results-list"></div>
+        <nav id="pagination-bar" class="pagination-bar" aria-label="Paginação" hidden>
+          <button id="page-prev" class="btn" type="button" disabled>
+            <svg class="icon icon-sm" aria-hidden="true"><use href="assets/icones.svg#anterior" /></svg>Anterior</button>
           <span id="page-info">Página 1</span>
-          <button id="page-next" class="btn-neon" type="button">Próxima</button>
-        </div>
-      </aside>
+          <button id="page-next" class="btn" type="button">Próxima
+            <svg class="icon icon-sm" aria-hidden="true"><use href="assets/icones.svg#proxima" /></svg></button>
+        </nav>
+      </section>
 
-      <section class="detail-pane">
+      <section class="detail-pane" aria-label="Decisão selecionada">
         <div id="empty-state" class="empty-state">
+          <svg class="icon" aria-hidden="true"><use href="assets/icones.svg#documento" /></svg>
           <strong>Selecione uma decisão</strong>
-          <span>A prévia aparecerá aqui.</span>
+          <span>O texto, os autos e os casos semelhantes aparecem aqui.</span>
         </div>
 
         <article id="detail" class="detail" hidden>
-          <div class="detail-head">
-            <div>
-              <span id="detail-instance" class="badge"></span>
-              <h1 id="detail-title"></h1>
-              <p id="detail-subtitle"></p>
-            </div>
-            <a id="open-file" class="open-button" target="_blank" rel="noreferrer">Abrir inteiro</a>
+          <div class="detail-barra">
+            <button class="btn btn-ghost" type="button" data-voltar>
+              <svg class="icon" aria-hidden="true"><use href="assets/icones.svg#seta-esquerda" /></svg>Voltar</button>
           </div>
+          <header class="detail-head">
+            <div class="detail-tags">
+              <span id="detail-instance" class="badge"></span>
+              <span id="detail-resultado" class="tag" hidden></span>
+            </div>
+            <h1 id="detail-title"></h1>
+            <p id="detail-subtitle"></p>
+            <div class="detail-actions">
+              <a id="open-file" class="btn btn-primary" target="_blank" rel="noreferrer">Abrir documento</a>
+              <button id="copy-link" class="btn" type="button">
+                <svg class="icon" aria-hidden="true"><use href="assets/icones.svg#link" /></svg><span>Copiar link</span></button>
+            </div>
+          </header>
 
+          <dl id="detail-meta" class="meta-grid"></dl>
+
+          <h2 class="secao-titulo">Autos de infração</h2>
           <div id="autos" class="autos"></div>
 
           <section id="similares" class="similares" hidden></section>
 
           <div class="preview-toolbar">
             <span id="preview-label"></span>
-            <button id="show-text" class="subtle" type="button">Texto</button>
-            <button id="show-file" class="subtle" type="button">Arquivo</button>
+            <div class="segmentado" role="group" aria-label="Visualização">
+              <button id="show-text" class="subtle" type="button">Texto</button>
+              <button id="show-file" class="subtle" type="button">Arquivo</button>
+            </div>
           </div>
 
           <div id="preview" class="preview"></div>
         </article>
       </section>
-    </section>
+    </div>
   </main>
 
+  <script src="site.js" defer></script>
   <script src="ia.js" defer></script>
   <script src="app.js" defer></script>
 </body>
