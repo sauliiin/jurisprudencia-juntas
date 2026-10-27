@@ -231,6 +231,11 @@ def test_cabecalhos(client: TestClient) -> None:
     assert resposta.headers["cache-control"] == "no-store"
 
 
+def test_respostas_comprimidas(client: TestClient) -> None:
+    resposta = client.get("/api/search", params={"limit": 5}, headers={"Accept-Encoding": "gzip"})
+    assert resposta.headers["content-encoding"] == "gzip"
+
+
 def test_cors_configurado(client: TestClient) -> None:
     resposta = client.get("/api/stats", headers={"Origin": "https://juris.omniai.com.br"})
     assert resposta.headers["access-control-allow-origin"] == "https://juris.omniai.com.br"
