@@ -1,49 +1,64 @@
-# Credenciais locais
+# Credenciais e configuração local
 credentials.json
 token.json
 token_upload.json
 .env
 .env.*
+!.env.example
 
-# Artefatos gerados pelo pipeline
+# Dados brutos e artefatos do pipeline (grandes, com dados pessoais ou regeráveis)
 votos_relatores_pdfs/
 pdfs_por_lei_e_ato/
 votos_brutos/
 pareceres_brutos/
 legislacao_brutos/
 assuntos.csv
+site_data/arquivos_sem_link_publico.txt
+site_publico/Autos/*.pdf
+
+# Bancos locais: o índice privado do pipeline, o cache e o índice público da API
 indice_busca.db
 indice_busca.db-*
 indice_publico.db
 indice_publico.db.tmp
-site_data/arquivos_sem_link_publico.txt
-*.pid
 pipeline*_cache.db
 pipeline*_cache.db-*
+*.sqlite
+*.sqlite3
 
-# Logs e temporarios de execucao
+# Logs e temporários de execução
 *.log
 log_*.txt
 nohup.out
+*.pid
 *.part
+*.tmp
+tmp_*
 .lo_*/
 .ocr_*/
 
 # Python
 __pycache__/
 *.py[cod]
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
 .venv/
 venv/
 env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+coverage.xml
+coverage.json
+htmlcov/
 
-# Sistema/editor
-.DS_Store
-Thumbs.db
+# Docker local
+docker-compose.override.yml
+
+# Ferramentas, editor e sistema
+.claude/
 .idea/
 .vscode/
-
-# Lixo do gerenciador de arquivos (KDE)
+.DS_Store
+Thumbs.db
 .directory
