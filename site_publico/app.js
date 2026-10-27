@@ -87,6 +87,43 @@ function tokenize(query) {
   return normalize(query).match(/[\p{L}\p{N}]+/gu) || [];
 }
 
+// O nome do arquivo traz o nome do autuado; na tela o voto aparece só por processo,
+// infração e resultado. nome_arquivo continua nos dados e na pontuação da busca.
+const TITULO_INFRACAO_MAX = 70;
+const RESULTADOS_NO_NOME = [
+  // INDEFERIDO antes de DEFERIDO: um contém o outro.
+  [/\bindeferid[oa]\b/, "Indeferido"],
+  [/\bnao conhecid[oa]\b/, "Não conhecido"],
+  [/\bdeferid[oa]\b/, "Deferido"],
+];
+
+function infracaoResumida(infracao = "") {
+  const texto = String(infracao).replace(/\s+/g, " ").trim().toLocaleLowerCase("pt-BR");
+  if (!texto) return "";
+  let resumo = texto;
+  if (texto.length > TITULO_INFRACAO_MAX) {
+    const corte = texto.slice(0, TITULO_INFRACAO_MAX);
+    const espaco = corte.lastIndexOf(" ");
+    resumo = `${(espaco > 40 ? corte.slice(0, espaco) : corte).replace(/[\s,.;:–-]+$/, "")}…`;
+  }
+  return resumo.charAt(0).toLocaleUpperCase("pt-BR") + resumo.slice(1);
+}
+
+function resultadoDoNome(nomeArquivo = "") {
+  const nome = normalize(nomeArquivo);
+  return RESULTADOS_NO_NOME.find(([padrao]) => padrao.test(nome))?.[1] || "";
+}
+
+function tituloPublico(record) {
+  return [
+    `Processo ${record.protocolo || "s/ nº"}`,
+    infracaoResumida(record.autos?.[0]?.infracao),
+    resultadoDoNome(record.nome_arquivo),
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
 function hiddenDatePhrase() {
   if (state.month && state.year) return normalize(`${state.month} de ${state.year}`).trim();
   if (state.year) return normalize(`de ${state.year}`).trim();
@@ -189,7 +226,7 @@ function scoreRecord(record, terms, phrase) {
 }
 
 function makeSnippet(record, terms, phrase) {
-  const source = record.assunto || record.texto || record.nome_arquivo || "";
+  const source = record.assunto || record.texto || tituloPublico(record);
   if (!terms.length) return escapeHtml(source.slice(0, 360));
   const normalized = normalize(source);
   let index = state.modoEfetivo === "phrase" ? normalized.indexOf(phrase) : -1;
@@ -537,7 +574,7 @@ function renderResults() {
       const autos = (item.autos || []).slice(0, 4).map((auto) => `<span class="chip">${escapeHtml(auto.numero)}</span>`).join("");
       return `
         <button class="result${active}" type="button" data-file-id="${escapeHtml(item.file_id)}">
-          <span class="result-title">${escapeHtml(item.nome_arquivo)}</span>
+          <span class="result-title">${escapeHtml(tituloPublico(item))}</span>
           <span class="result-meta">${escapeHtml(item.decisao_instancia)} · ${escapeHtml(item.protocolo || "sem protocolo")}${
             item.ia_similaridade ? ` · similaridade ${Math.round(item.ia_similaridade * 100)}%` : ""
           }</span>
@@ -575,7 +612,7 @@ function renderDetail() {
   }, 220);
   els.detail.hidden = false;
   els.detailPane.scrollTop = 0;
-  els.detailTitle.textContent = item.nome_arquivo;
+  els.detailTitle.textContent = tituloPublico(item);
   els.detailSubtitle.textContent = item.assunto || item.protocolo || "";
   els.detailInstance.textContent = item.decisao_instancia;
   if (item.tem_arquivo_publico) {
@@ -640,7 +677,7 @@ async function renderSimilares(item) {
       .map(
         (linha) => `
       <button class="similar" type="button" data-file-id="${escapeHtml(linha.id)}">
-        <span class="similar-title">${escapeHtml(linha.record.nome_arquivo)}</span>
+        <span class="similar-title">${escapeHtml(tituloPublico(linha.record))}</span>
         <span class="similar-meta">${escapeHtml(linha.record.decisao_instancia)}${
           linha.resultado ? ` · <b>${escapeHtml(linha.resultado)}</b>` : ""
         }</span>
