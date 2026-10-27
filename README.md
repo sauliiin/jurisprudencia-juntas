@@ -409,6 +409,11 @@ extrai os campos que o site deve exibir:
 - local da constatação: `LOCAL DA CONSTATAÇÃO DA INFRAÇÃO`;
 - tipo de decisão: `Decisão de 1ª instância` ou `Decisão de 2ª instância`.
 
+O autuado e o caminho local do arquivo (`caminho_bruto`) ficam só no
+`indice_busca.db`. No `site_data/votos.jsonl` publicado, o campo `autuado` sai
+dos autos, o nome é trocado por `[AUTUADO]` no texto, no assunto e no nome do
+arquivo, e `caminho_bruto` não é gravado.
+
 Por padrão, ATAs, pautas e documentos sem `DISPOSITIVO DA DECISÃO` são removidos
 de `votos_brutos/` e registrados como pulados no índice. Para mantê-los na pasta
 bruta mesmo assim:
@@ -479,7 +484,7 @@ script não cria commit.
 Para acompanhar o progresso localmente enquanto ele roda em segundo plano:
 
 ```bash
-tail -f /home/mestrey/Documentos/GitHub/jurisprudencia-juntas/atualizar_tudo.log
+tail -f atualizar_tudo.log
 ```
 
 ## Saídas
