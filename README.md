@@ -1,5 +1,8 @@
 # Jurisprudência das Juntas — acervo público de decisões
 
+[![CI](https://github.com/sauliiin/jurisprudencia-juntas/actions/workflows/ci.yml/badge.svg)](https://github.com/sauliiin/jurisprudencia-juntas/actions/workflows/ci.yml)
+[![Cobertura](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/sauliiin/jurisprudencia-juntas/badges/coverage.json)](https://github.com/sauliiin/jurisprudencia-juntas/actions/workflows/ci.yml)
+
 > **English summary.** Data pipeline that collects ~12,000 administrative decisions
 > (1st and 2nd instance) of Belo Horizonte's tax/inspection appeal boards from Google
 > Drive, extracts text from PDF/DOCX/Google Docs (with OCR fallback), enriches each
