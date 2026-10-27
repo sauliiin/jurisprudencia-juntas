@@ -90,8 +90,8 @@ class ParecerItem:
     nome_arquivo: str
     mime: str
     file_size: str | None
-    categoria: str          # subpasta de 1º nível (ou "Raiz"), ou a norma
-    pasta: str              # caminho relativo completo dentro do banco
+    categoria: str  # subpasta de 1º nível (ou "Raiz"), ou a norma
+    pasta: str  # caminho relativo completo dentro do banco
     destination: Path
     modificado_em: str = ""
 
@@ -176,8 +176,7 @@ def _ocr_pdf(path: Path, lang: str, dpi: int, max_pages: int) -> str:
             if max_pages:
                 cmd += ["-l", str(max_pages)]
             cmd += [str(path), str(prefix)]
-            subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                           timeout=600, check=False)
+            subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=600, check=False)
             partes = [_tesseract_image(png, lang) for png in sorted(tmp.glob("page*.png"))]
             return "\n".join(p for p in partes if p.strip())
         except Exception:
@@ -219,21 +218,28 @@ def _texto_planilha(path: Path) -> str | None:
             prof, out = tmp / "profile", tmp / "out"
             out.mkdir()
             # 44=vírgula, 34=aspas, 76=UTF-8; o -1 final exporta cada aba num CSV.
-            filtro = 'csv:Text - txt - csv (StarCalc):44,34,76,1,,0,false,true,false,false,false,-1'
+            filtro = "csv:Text - txt - csv (StarCalc):44,34,76,1,,0,false,true,false,false,false,-1"
             subprocess.run(
-                _pipeline._SOFFICE + ["--headless", f"-env:UserInstallation=file://{prof}",
-                                      "--convert-to", filtro, "--outdir", str(out), str(path)],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                timeout=180, check=False,
+                [
+                    *_pipeline._SOFFICE,
+                    "--headless",
+                    f"-env:UserInstallation=file://{prof}",
+                    "--convert-to",
+                    filtro,
+                    "--outdir",
+                    str(out),
+                    str(path),
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=180,
+                check=False,
             )
             partes = []
             for csv_path in sorted(out.glob("*.csv")):
                 with csv_path.open(encoding="utf-8", errors="ignore", newline="") as fh:
-                    linhas = [
-                        " | ".join(c.strip() for c in row if c.strip())
-                        for row in csv.reader(fh)
-                    ]
-                partes.append("\n".join(l for l in linhas if l))
+                    linhas = [" | ".join(c.strip() for c in row if c.strip()) for row in csv.reader(fh)]
+                partes.append("\n".join(linha for linha in linhas if linha))
             texto = "\n\n".join(p for p in partes if p)
             return texto or None
         except Exception:
@@ -252,10 +258,20 @@ def _texto_html(path: Path) -> tuple[str, list[list[int]]] | None:
             prof, out = tmp / "profile", tmp / "out"
             out.mkdir()
             subprocess.run(
-                _pipeline._SOFFICE + ["--headless", f"-env:UserInstallation=file://{prof}",
-                                      "--convert-to", "html", "--outdir", str(out), str(path)],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                timeout=180, check=False,
+                [
+                    *_pipeline._SOFFICE,
+                    "--headless",
+                    f"-env:UserInstallation=file://{prof}",
+                    "--convert-to",
+                    "html",
+                    "--outdir",
+                    str(out),
+                    str(path),
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=180,
+                check=False,
             )
             htmls = list(out.glob("*.html"))
             if not htmls:
@@ -275,8 +291,15 @@ def _ocr_documento(path: Path, ext: str, lang: str, dpi: int, max_pages: int) ->
     return ""
 
 
-def _walk(service, folder_id: str, rel_path: list[str], raw_dir: Path,
-          out: list[ParecerItem], stats: WalkStats, por_norma: bool = False) -> None:
+def _walk(
+    service,
+    folder_id: str,
+    rel_path: list[str],
+    raw_dir: Path,
+    out: list[ParecerItem],
+    stats: WalkStats,
+    por_norma: bool = False,
+) -> None:
     """Percorre recursivamente o Drive coletando arquivos suportados."""
     children = list(
         _iter(
@@ -294,7 +317,7 @@ def _walk(service, folder_id: str, rel_path: list[str], raw_dir: Path,
             continue
         if mime == FOLDER_MIME:
             stats.folders += 1
-            _walk(service, cid, rel_path + [name], raw_dir, out, stats, por_norma)
+            _walk(service, cid, [*rel_path, name], raw_dir, out, stats, por_norma)
         elif mime in WANTED_MIMES:
             categoria = rel_path[0] if rel_path else "Raiz"
             if por_norma:
@@ -304,8 +327,9 @@ def _walk(service, folder_id: str, rel_path: list[str], raw_dir: Path,
             stem = _san(Path(name).stem)[:140]
             destination = raw_dir / _san(categoria) / f"{stem} - {cid[:8]}{ext}"
             out.append(
-                ParecerItem(cid, name, mime, child.get("size"), categoria, pasta, destination,
-                            child.get("modifiedTime") or "")
+                ParecerItem(
+                    cid, name, mime, child.get("size"), categoria, pasta, destination, child.get("modifiedTime") or ""
+                )
             )
             stats.files += 1
 
@@ -335,17 +359,13 @@ class Downloader:
         if _raw_exists(item.destination, item.file_size):
             return
         item.destination.parent.mkdir(parents=True, exist_ok=True)
-        dl_item = DownloadItem(
-            item.file_id, item.nome_arquivo, item.file_size, item.destination, item.categoria
-        )
+        dl_item = DownloadItem(item.file_id, item.nome_arquivo, item.file_size, item.destination, item.categoria)
         _do_download(self.service(), dl_item)
 
 
-def process_item(item: ParecerItem, downloader: Downloader, opts: "OcrOpts") -> ParecerRecord | None:
+def process_item(item: ParecerItem, downloader: Downloader, opts: OcrOpts) -> ParecerRecord | None:
     downloader.ensure_file(item)
-    dl_item = DownloadItem(
-        item.file_id, item.nome_arquivo, item.file_size, item.destination, item.categoria
-    )
+    dl_item = DownloadItem(item.file_id, item.nome_arquivo, item.file_size, item.destination, item.categoria)
     ext = MIME_LABEL.get(item.mime, "")
     riscado: list[list[int]] = []
     lido = _texto_html(item.destination) if opts.legislacao and ext in COM_RISCADO else None
@@ -407,8 +427,7 @@ def _export_jsonl(path: Path, records: dict[str, dict], legislacao: bool = False
     if legislacao:
         # Refeito a cada exportação: mudanças na divisão valem sem baixar nada de novo.
         for rec in records.values():
-            rec["dispositivos"] = dividir(rec.get("texto") or "", rec.get("nome_arquivo") or "",
-                                          rec.get("riscado"))
+            rec["dispositivos"] = dividir(rec.get("texto") or "", rec.get("nome_arquivo") or "", rec.get("riscado"))
     tmp = path.with_suffix(path.suffix + ".part")
     ordered = sorted(
         records.values(),
@@ -425,27 +444,38 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Indexa o banco de pareceres do Drive.")
     parser.add_argument("--credentials", default="credentials.json")
     parser.add_argument("--token", default="token.json")
-    parser.add_argument("--legislacao", action="store_true",
-                        help="Indexa a pasta de legislação: texto inteiro, categoria = norma, "
-                             "redação revogada marcada e divisão em artigos.")
+    parser.add_argument(
+        "--legislacao",
+        action="store_true",
+        help="Indexa a pasta de legislação: texto inteiro, categoria = norma, "
+        "redação revogada marcada e divisão em artigos.",
+    )
     parser.add_argument("--folder", default=None)
     parser.add_argument("--brutos", default=None)
     parser.add_argument("--jsonl", default=None)
     parser.add_argument("--workers", type=int, default=6)
-    parser.add_argument("--doc-concurrency", type=int, default=1,
-                        help="Conversões .doc simultâneas via LibreOffice. 1 evita colisões.")
-    parser.add_argument("--max-chars", type=int, default=None,
-                        help="Limite de caracteres do texto por documento. 0 = sem limite "
-                             "(padrão: 120000; na legislação, sem limite).")
-    parser.add_argument("--ocr", action=argparse.BooleanOptionalAction, default=True,
-                        help="OCR (tesseract) como fallback para documentos escaneados.")
+    parser.add_argument(
+        "--doc-concurrency", type=int, default=1, help="Conversões .doc simultâneas via LibreOffice. 1 evita colisões."
+    )
+    parser.add_argument(
+        "--max-chars",
+        type=int,
+        default=None,
+        help="Limite de caracteres do texto por documento. 0 = sem limite (padrão: 120000; na legislação, sem limite).",
+    )
+    parser.add_argument(
+        "--ocr",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="OCR (tesseract) como fallback para documentos escaneados.",
+    )
     parser.add_argument("--ocr-lang", default="por+eng", help="Idiomas do tesseract.")
     parser.add_argument("--ocr-dpi", type=int, default=220, help="DPI ao rasterizar PDFs.")
-    parser.add_argument("--ocr-max-pages", type=int, default=15,
-                        help="Máximo de páginas a passar por OCR por PDF. 0 = todas.")
+    parser.add_argument(
+        "--ocr-max-pages", type=int, default=15, help="Máximo de páginas a passar por OCR por PDF. 0 = todas."
+    )
     parser.add_argument("--limit", type=int, default=0, help="Processa só N arquivos (teste).")
-    parser.add_argument("--rebuild", action="store_true",
-                        help="Ignora o JSONL existente e reprocessa tudo.")
+    parser.add_argument("--rebuild", action="store_true", help="Ignora o JSONL existente e reprocessa tudo.")
     args = parser.parse_args()
     leg = args.legislacao
     args.folder = args.folder or (LEGISLACAO_FOLDER_ID if leg else PARECERES_FOLDER_ID)
@@ -459,7 +489,9 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     base = Path.cwd()
-    resolve = lambda v: Path(v) if Path(v).is_absolute() else base / v
+
+    def resolve(v):
+        return Path(v) if Path(v).is_absolute() else base / v
 
     # Serializa as conversões .doc do LibreOffice (flatpak colide em paralelo).
     _pipeline._DOC_SEM = threading.Semaphore(max(1, args.doc_concurrency))
@@ -528,9 +560,7 @@ def main() -> int:
     total = len(items)
 
     with ThreadPoolExecutor(max_workers=max(1, args.workers)) as pool:
-        futures = {
-            pool.submit(process_item, it, downloader, ocr_opts): it for it in items
-        }
+        futures = {pool.submit(process_item, it, downloader, ocr_opts): it for it in items}
         for idx, fut in enumerate(as_completed(futures), start=1):
             it = futures[fut]
             try:
@@ -549,8 +579,10 @@ def main() -> int:
                 elapsed = max(time.time() - started, 0.001)
                 rate = idx / elapsed * 60
                 eta = (total - idx) / rate if rate else 0
-                print(f"[{idx}/{total}] ok={ok} ocr={ocr_count} erros={errors} | "
-                      f"{rate:.1f} arq/min | ETA {eta:.1f} min", flush=True)
+                print(
+                    f"[{idx}/{total}] ok={ok} ocr={ocr_count} erros={errors} | {rate:.1f} arq/min | ETA {eta:.1f} min",
+                    flush=True,
+                )
             else:
                 print(f"[{idx}/{total}] {tag}{record.ext:4} {chars:>7} chars | {record.nome_arquivo}", flush=True)
 
@@ -562,7 +594,7 @@ def main() -> int:
     print(f"Erros              : {errors}")
     print(f"Registros no JSONL : {exported}")
     print(f"JSONL              : {jsonl_path}")
-    print(f"Tempo              : {(time.time() - started)/60:.1f} min")
+    print(f"Tempo              : {(time.time() - started) / 60:.1f} min")
     return 0 if errors == 0 else 1
 
 

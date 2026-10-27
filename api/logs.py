@@ -16,8 +16,7 @@ _CAMPOS_PADRAO = set(vars(logging.makeLogRecord({})))
 class FormatoJson(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         evento = {
-            "ts": time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(record.created))
-            + f".{int(record.msecs):03d}Z",
+            "ts": time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(record.created)) + f".{int(record.msecs):03d}Z",
             "nivel": record.levelname,
             "logger": record.name,
             "msg": record.getMessage(),

@@ -61,9 +61,20 @@ CREATE VIRTUAL TABLE votos_fts USING fts5(
 
 # A data da decisão é a última data por extenso do texto (a da assinatura); o site usa a
 # mesma regra quando roda sem a API.
-_MESES = (
-    "janeiro fevereiro março abril maio junho julho agosto setembro outubro novembro dezembro"
-).split()
+_MESES = [
+    "janeiro",
+    "fevereiro",
+    "março",
+    "abril",
+    "maio",
+    "junho",
+    "julho",
+    "agosto",
+    "setembro",
+    "outubro",
+    "novembro",
+    "dezembro",
+]
 _DATA = re.compile(
     r"\b(\d{1,2})º?\s+de\s+(janeiro|fevereiro|março|marco|abril|maio|junho|julho|agosto|setembro"
     r"|outubro|novembro|dezembro)\s+de\s+(20\d{2})\b",
@@ -73,12 +84,10 @@ _DATA = re.compile(
 
 def data_da_decisao(texto: str) -> str | None:
     """Data ISO (AAAA-MM-DD) da última data por extenso do texto, ou None."""
-    ultima = None
-    for ultima in _DATA.finditer(texto or ""):
-        pass
-    if not ultima:
+    achados = list(_DATA.finditer(texto or ""))
+    if not achados:
         return None
-    dia, mes, ano = ultima.groups()
+    dia, mes, ano = achados[-1].groups()
     numero_mes = _MESES.index(mes.lower().replace("marco", "março")) + 1
     if not 1 <= int(dia) <= 31:
         return None

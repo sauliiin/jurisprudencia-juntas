@@ -1,6 +1,6 @@
 """Aplicação FastAPI: API do acervo e, por padrão, o site estático no mesmo processo.
 
-    uvicorn api.main:app            # ou: python -m api
+uvicorn api.main:app            # ou: python -m api
 """
 
 from __future__ import annotations

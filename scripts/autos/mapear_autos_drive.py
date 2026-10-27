@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
 import time
 from collections import defaultdict
 from pathlib import Path
@@ -107,8 +106,7 @@ def autos_do_indice() -> set[str]:
 def main() -> int:
     p = argparse.ArgumentParser(description="Mapeia autos do Drive para o manifest.json.")
     p.add_argument("--folder-id", default=FOLDER_ID_PADRAO, help="Pasta Autos no Drive")
-    p.add_argument("--forcar", action="store_true",
-                   help="Regrava o manifesto mesmo com cobertura baixa (<90%%)")
+    p.add_argument("--forcar", action="store_true", help="Regrava o manifesto mesmo com cobertura baixa (<90%%)")
     args = p.parse_args()
 
     esperados = autos_do_indice()
@@ -137,9 +135,7 @@ def main() -> int:
         return 1
 
     if faltando:
-        (MANIFEST.parent / "_faltando_no_drive.txt").write_text(
-            "\n".join(sorted(faltando)), encoding="utf-8"
-        )
+        (MANIFEST.parent / "_faltando_no_drive.txt").write_text("\n".join(sorted(faltando)), encoding="utf-8")
 
     MANIFEST.write_text(
         json.dumps(
@@ -154,8 +150,7 @@ def main() -> int:
         ),
         encoding="utf-8",
     )
-    print(f"\n{MANIFEST} regravado: {len(mapa)} autos, modo drive "
-          f"({MANIFEST.stat().st_size / 1024:.0f} KB)")
+    print(f"\n{MANIFEST} regravado: {len(mapa)} autos, modo drive ({MANIFEST.stat().st_size / 1024:.0f} KB)")
     return 0
 
 

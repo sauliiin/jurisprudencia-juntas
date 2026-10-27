@@ -73,15 +73,18 @@ PESO_CITACOES = 1.0
 _TOKEN = re.compile(r"[a-z]{3,}")
 _NAO_ASCII = re.compile(r"[^\x00-\x7f]")
 _AUTO = re.compile(r"\b\d{8,14}[A-Z]{2}\b")
-_FISCAL = re.compile(
-    r"considera[çc][õo]es fiscais\s*:?\s*(.+?)(?:Em sua defesa|FUNDAMENTA[ÇC][ÃA]O|$)", re.I | re.S
-)
+_FISCAL = re.compile(r"considera[çc][õo]es fiscais\s*:?\s*(.+?)(?:Em sua defesa|FUNDAMENTA[ÇC][ÃA]O|$)", re.I | re.S)
 
 RESULTADOS = ["", "indeferido", "deferido", "parcialmente deferido", "não conhecido", "extinto", "diligência"]
 _PADROES_RESULTADO = [
     (5, re.compile(r"EXTINT[OA]|PERDA\s+DO\s+OBJETO")),
     (4, re.compile(r"NAO\s+(?:SE\s+)?CONHEC")),
-    (3, re.compile(r"PARCIALMENTE\s+DEFERID|DEFIRO\s+PARCIALMENTE|DEFIRO\s+EM\s+PARTE|PARCIAL\s+PROVIMENTO|DEFERIMENTO\s+PARCIAL")),
+    (
+        3,
+        re.compile(
+            r"PARCIALMENTE\s+DEFERID|DEFIRO\s+PARCIALMENTE|DEFIRO\s+EM\s+PARTE|PARCIAL\s+PROVIMENTO|DEFERIMENTO\s+PARCIAL"
+        ),
+    ),
     (1, re.compile(r"INDEFIR|INDEFERID|NEGO\s+PROVIMENTO|NEGAR\s+PROVIMENTO|IMPROCEDENTE")),
     (2, re.compile(r"\bDEFIR|\bDEFERID|DOU\s+PROVIMENTO|DAR\s+PROVIMENTO|\bPROCEDENTE")),
     (6, re.compile(r"DILIGENCIA")),
@@ -206,13 +209,15 @@ def carregar_legislacao() -> list[dict]:
                 if u["revogado"]:
                     continue
                 chave = (chave_norma(*norma.groups()), u["numero"]) if norma and u["tipo"] == "artigo" else None
-                unidades.append({
-                    "id": f"{doc['file_id']}#{u['id']}",
-                    "doc": doc["file_id"],
-                    "numero": u["numero"],
-                    "chave": chave,
-                    "texto": texto[u["inicio"] : u["fim"]],
-                })
+                unidades.append(
+                    {
+                        "id": f"{doc['file_id']}#{u['id']}",
+                        "doc": doc["file_id"],
+                        "numero": u["numero"],
+                        "chave": chave,
+                        "texto": texto[u["inicio"] : u["fim"]],
+                    }
+                )
     return unidades
 
 
@@ -327,7 +332,9 @@ def avaliar(votos, x, chaves, elegiveis, vocab_idx, idf, dim, epocas, leg=None) 
     sim[np.arange(len(teste)), teste] = -9
     top = np.argpartition(-sim, 5, axis=1)[:, :5]
     p5 = float(np.mean([np.mean([next(iter(chaves[i])) in chaves[j] for j in top[r]]) for r, i in enumerate(teste)]))
-    acaso = float(np.mean([(sum(next(iter(chaves[i])) in ks for ks in chaves) - 1) / (len(votos) - 1) for i in teste[:300]]))
+    acaso = float(
+        np.mean([(sum(next(iter(chaves[i])) in ks for ks in chaves) - 1) / (len(votos) - 1) for i in teste[:300]])
+    )
 
     # Classificação da infração a partir do texto da decisão.
     logits = (np.asarray(x[teste] @ w_q.astype(np.float32)) * (escala / 127)) @ c + b
@@ -428,9 +435,9 @@ def main() -> None:
             if a.get("infracao"):
                 nome_original.setdefault(chave_infracao(a["infracao"]), a["infracao"].strip())
     elegiveis = [
-        i for i, v in enumerate(votos)
-        if len(v.get("autos") or []) == 1 and chaves[i]
-        and contagem[next(iter(chaves[i]))] >= MIN_DOCS_POR_INFRACAO
+        i
+        for i, v in enumerate(votos)
+        if len(v.get("autos") or []) == 1 and chaves[i] and contagem[next(iter(chaves[i]))] >= MIN_DOCS_POR_INFRACAO
     ]
 
     unidades = carregar_legislacao()
@@ -449,7 +456,11 @@ def main() -> None:
         metricas, metricas_leg = avaliar(votos, x, chaves, elegiveis, vocab_idx, idf, args.dim, args.epocas, leg)
         print("Resultado em decisões nunca vistas:", json.dumps(metricas, ensure_ascii=False), flush=True)
         if metricas_leg:
-            print("Legislação, a partir de decisões nunca vistas:", json.dumps(metricas_leg, ensure_ascii=False), flush=True)
+            print(
+                "Legislação, a partir de decisões nunca vistas:",
+                json.dumps(metricas_leg, ensure_ascii=False),
+                flush=True,
+            )
 
     # Modelo final: mesmas configurações, agora com todas as decisões rotuladas.
     classes = sorted({next(iter(chaves[i])) for i in elegiveis})
@@ -472,7 +483,9 @@ def main() -> None:
     w_q.tofile(SAIDA / "termos.bin")
     np.round(d * 127).astype(np.int8).tofile(SAIDA / "docs.bin")
     vizinhos.tofile(SAIDA / "vizinhos.bin")
-    np.array([resultado_da_decisao(v.get("texto") or "") for v in votos], dtype=np.uint8).tofile(SAIDA / "resultados.bin")
+    np.array([resultado_da_decisao(v.get("texto") or "") for v in votos], dtype=np.uint8).tofile(
+        SAIDA / "resultados.bin"
+    )
     np.concatenate([c.ravel(), b]).astype(np.float32).tofile(SAIDA / "classificador.bin")
     modelo = {
         "versao": 1,

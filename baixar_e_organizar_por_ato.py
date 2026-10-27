@@ -50,22 +50,26 @@ import threading
 import time
 import unicodedata
 from collections import Counter
+from collections.abc import Iterable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterable
+from typing import ClassVar
 
 try:
-    import requests
     import pdfplumber
+    import requests
+
     HAS_PDF_DEPS = True
 except ImportError:
     HAS_PDF_DEPS = False
 
 try:
-    import docx2txt          # extração de .docx
+    import docx2txt  # extração de .docx
 except ImportError:
     docx2txt = None
+
+import contextlib
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
@@ -74,17 +78,17 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaIoBaseDownload
 
-
 # =============================================================================
 # FINE TUNING — ajuste aqui velocidade e resiliência do pipeline.
 # São os defaults; cada um ainda pode ser sobrescrito por flag de CLI.
 # =============================================================================
 
+
 class Tuning:
     # Paralelismo: número de workers por estágio
-    INDEX_WORKERS    = 60     # listagem de pastas/arquivos no Drive
-    DOWNLOAD_WORKERS = 30     # download dos arquivos do Drive
-    ORGANIZE_WORKERS = 24     # consulta SIF + organização por ato
+    INDEX_WORKERS = 60  # listagem de pastas/arquivos no Drive
+    DOWNLOAD_WORKERS = 30  # download dos arquivos do Drive
+    ORGANIZE_WORKERS = 24  # consulta SIF + organização por ato
 
     # SIF: consultas por segundo, somando todos os organize workers (throttle global)
     SIF_RATE = 10.0
@@ -97,16 +101,35 @@ class Tuning:
     # remove conectivos finais soltos (preposições/artigos).
     # Ver nome_pasta_do_ato().
     MAX_PALAVRAS_ATO = 7
-    PALAVRAS_FINAIS_SOLTAS = {
-        "A", "O", "AS", "OS", "E",
-        "DE", "DA", "DO", "DAS", "DOS",
-        "EM", "NA", "NO", "NAS", "NOS",
-        "AO", "AOS", "OU", "COM", "SEM", "POR",
-    }
+    PALAVRAS_FINAIS_SOLTAS: ClassVar[frozenset[str]] = frozenset(
+        {
+            "A",
+            "O",
+            "AS",
+            "OS",
+            "E",
+            "DE",
+            "DA",
+            "DO",
+            "DAS",
+            "DOS",
+            "EM",
+            "NA",
+            "NO",
+            "NAS",
+            "NOS",
+            "AO",
+            "AOS",
+            "OU",
+            "COM",
+            "SEM",
+            "POR",
+        }
+    )
 
     # Resiliência: retry com backoff exponencial nas falhas de rede
-    MAX_RETRIES       = 20    # tentativas antes de desistir do item; 0 = infinito
-    RETRY_BACKOFF     = 2.0   # espera da 1ª tentativa, em s (dobra a cada vez)
+    MAX_RETRIES = 20  # tentativas antes de desistir do item; 0 = infinito
+    RETRY_BACKOFF = 2.0  # espera da 1ª tentativa, em s (dobra a cada vez)
     RETRY_BACKOFF_CAP = 60.0  # teto da espera entre tentativas, em s
 
 
@@ -114,27 +137,27 @@ class Tuning:
 # Configuração
 # =============================================================================
 
-SCOPES       = ["https://www.googleapis.com/auth/drive.readonly"]
-FOLDER_MIME  = "application/vnd.google-apps.folder"
-PDF_MIME     = "application/pdf"
-GDOC_MIME    = "application/vnd.google-apps.document"
-DOCX_MIME    = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-DOC_MIME     = "application/msword"
+SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
+FOLDER_MIME = "application/vnd.google-apps.folder"
+PDF_MIME = "application/pdf"
+GDOC_MIME = "application/vnd.google-apps.document"
+DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+DOC_MIME = "application/msword"
 
 # tipo (CLI --tipos) -> mimeType ; mimeType -> extensão local do arquivo baixado.
 # O tipo de cada voto é derivado da extensão (não há coluna mime no cache).
 TIPO_MIME = {"pdf": PDF_MIME, "gdoc": GDOC_MIME, "docx": DOCX_MIME, "doc": DOC_MIME}
-MIME_EXT  = {PDF_MIME: ".pdf", GDOC_MIME: ".txt", DOCX_MIME: ".docx", DOC_MIME: ".doc"}
+MIME_EXT = {PDF_MIME: ".pdf", GDOC_MIME: ".txt", DOCX_MIME: ".docx", DOC_MIME: ".doc"}
 
-SIF_BASE  = "https://sif-piloto.pbh.gov.br"
+SIF_BASE = "https://sif-piloto.pbh.gov.br"
 LOGIN_URL = f"{SIF_BASE}/Login.php?comp=1&ccsForm=Login"
-AUTO_URL  = f"{SIF_BASE}/MostraAuto.php"
+AUTO_URL = f"{SIF_BASE}/MostraAuto.php"
 # Credenciais do SIF vêm do ambiente (ou do .env carregado por atualizar_tudo.sh).
 LOGIN_USER = os.environ.get("SIF_USER", "")
 LOGIN_PASS = os.environ.get("SIF_PASS", "")
 
 AUTO_RE = re.compile(r"\b(\d{8,14})([A-Z]{2})\b")
-LEI_RE  = re.compile(r"LEI\s+\d+[\./]\d+", re.IGNORECASE)
+LEI_RE = re.compile(r"LEI\s+\d+[\./]\d+", re.IGNORECASE)
 
 # --- Campos extraídos para o assuntos.csv ------------------------------------
 PROTOCOLO_RE = re.compile(r"31\.\d{6,10}(?:[_\-/]?\d{4})-\d{2}")
@@ -157,7 +180,7 @@ ATO_RE = re.compile(
     re.IGNORECASE | re.DOTALL,
 )
 
-_SENTINEL = object()   # sinaliza fim de fila para os workers
+_SENTINEL = object()  # sinaliza fim de fila para os workers
 
 # Máximo de tentativas em falhas transitórias de rede (ver Tuning.MAX_RETRIES);
 # sobrescrito em main() pelo --max-retries. 0 = infinito.
@@ -167,6 +190,7 @@ _RETRY_MAX = Tuning.MAX_RETRIES
 # =============================================================================
 # Cache SQLite
 # =============================================================================
+
 
 class CacheDB:
     """
@@ -228,16 +252,15 @@ class CacheDB:
 
     # --- índice ---
 
-    def save_arquivo(self, item: "DownloadItem") -> None:
+    def save_arquivo(self, item: DownloadItem) -> None:
         with self._wlock:
             self._conn().execute(
                 "INSERT OR IGNORE INTO arquivos VALUES (?,?,?,?,?)",
-                (item.file_id, item.file_name, item.file_size,
-                 str(item.destination), item.instancia),
+                (item.file_id, item.file_name, item.file_size, str(item.destination), item.instancia),
             )
             self._conn().commit()
 
-    def upsert_arquivo(self, item: "DownloadItem") -> None:
+    def upsert_arquivo(self, item: DownloadItem) -> None:
         """Inclui ou atualiza metadados sem criar uma segunda cópia do file_id."""
         with self._wlock:
             self._conn().execute(
@@ -251,15 +274,16 @@ class CacheDB:
                     destination=excluded.destination,
                     instancia=excluded.instancia
                 """,
-                (item.file_id, item.file_name, item.file_size,
-                 str(item.destination), item.instancia),
+                (item.file_id, item.file_name, item.file_size, str(item.destination), item.instancia),
             )
             self._conn().commit()
 
-    def load_arquivos(self) -> list["DownloadItem"]:
-        rows = self._conn().execute(
-            "SELECT file_id, file_name, file_size, destination, instancia FROM arquivos"
-        ).fetchall()
+    def load_arquivos(self) -> list[DownloadItem]:
+        rows = (
+            self._conn()
+            .execute("SELECT file_id, file_name, file_size, destination, instancia FROM arquivos")
+            .fetchall()
+        )
         return [DownloadItem(r[0], r[1], r[2], Path(r[3]), r[4]) for r in rows]
 
     def clear_arquivos(self) -> None:
@@ -270,9 +294,7 @@ class CacheDB:
             self._conn().commit()
 
     def is_index_complete(self) -> bool:
-        row = self._conn().execute(
-            "SELECT value FROM meta WHERE key='index_complete'"
-        ).fetchone()
+        row = self._conn().execute("SELECT value FROM meta WHERE key='index_complete'").fetchone()
         return bool(row and row[0] == "1")
 
     def mark_index_complete(self, complete: bool = True) -> None:
@@ -299,18 +321,11 @@ class CacheDB:
         return self._conn().execute("SELECT COUNT(*) FROM index_folders").fetchone()[0]
 
     def indexed_folders(self) -> list[dict[str, str]]:
-        rows = self._conn().execute(
-            "SELECT folder_id, folder_name, instancia FROM index_folders"
-        ).fetchall()
-        return [
-            {"id": row[0], "name": row[1], "instancia": row[2]}
-            for row in rows
-        ]
+        rows = self._conn().execute("SELECT folder_id, folder_name, instancia FROM index_folders").fetchall()
+        return [{"id": row[0], "name": row[1], "instancia": row[2]} for row in rows]
 
     def get_meta(self, key: str) -> str | None:
-        row = self._conn().execute(
-            "SELECT value FROM meta WHERE key=?", (key,)
-        ).fetchone()
+        row = self._conn().execute("SELECT value FROM meta WHERE key=?", (key,)).fetchone()
         return row[0] if row else None
 
     def set_meta(self, key: str, value: str) -> None:
@@ -321,9 +336,7 @@ class CacheDB:
             )
             self._conn().commit()
 
-    def mark_public_update(
-        self, file_id: str, reason: str, modified_time: str | None = None
-    ) -> None:
+    def mark_public_update(self, file_id: str, reason: str, modified_time: str | None = None) -> None:
         with self._wlock:
             self._conn().execute(
                 """
@@ -340,16 +353,18 @@ class CacheDB:
             self._conn().commit()
 
     def pending_public_updates(self) -> dict[str, str]:
-        rows = self._conn().execute(
-            "SELECT file_id, reason FROM public_updates"
-        ).fetchall()
+        rows = self._conn().execute("SELECT file_id, reason FROM public_updates").fetchall()
         return {row[0]: row[1] for row in rows}
 
     def get_drive_revision(self, file_id: str) -> str | None:
-        row = self._conn().execute(
-            "SELECT modified_time FROM drive_revisions WHERE file_id=?",
-            (file_id,),
-        ).fetchone()
+        row = (
+            self._conn()
+            .execute(
+                "SELECT modified_time FROM drive_revisions WHERE file_id=?",
+                (file_id,),
+            )
+            .fetchone()
+        )
         return row[0] if row else None
 
     def clear_public_update(self, file_id: str) -> None:
@@ -383,16 +398,16 @@ class CacheDB:
 
     def get_pares(self, file_id: str) -> list[tuple[str, str]] | None:
         """Lista de (lei, ato) do voto. [] = processado sem par; None = não processado."""
-        row = self._conn().execute(
-            "SELECT pares FROM sif_pares WHERE file_id=?", (file_id,)
-        ).fetchone()
+        row = self._conn().execute("SELECT pares FROM sif_pares WHERE file_id=?", (file_id,)).fetchone()
         if row is None:
             return None
         import json
+
         return [tuple(p) for p in json.loads(row[0])] if row[0] else []
 
     def save_pares(self, file_id: str, pares: list[tuple[str, str]]) -> None:
         import json
+
         with self._wlock:
             self._conn().execute(
                 "INSERT OR REPLACE INTO sif_pares VALUES (?,?)",
@@ -405,22 +420,43 @@ class CacheDB:
 # Filtros de pasta
 # =============================================================================
 
+
 def _norm(v: str) -> str:
     d = unicodedata.normalize("NFKD", v)
     return re.sub(r"\s+", " ", "".join(c for c in d if not unicodedata.combining(c)).casefold()).strip()
 
-_2A = {_norm(n) for n in {
-    "voto dos relatores","votos dos relatores","voto de relatores","votos de relatores",
-    "voto relatores","votos relatores","voto dos relatores(as)","votos dos relatores(as)",
-    "voto dos relatres","votos dos relatres","voto das relatoras","votos das relatoras","votos relatoras",
-}}
+
+_2A = {
+    _norm(n)
+    for n in {
+        "voto dos relatores",
+        "votos dos relatores",
+        "voto de relatores",
+        "votos de relatores",
+        "voto relatores",
+        "votos relatores",
+        "voto dos relatores(as)",
+        "votos dos relatores(as)",
+        "voto dos relatres",
+        "votos dos relatres",
+        "voto das relatoras",
+        "votos das relatoras",
+        "votos relatoras",
+    }
+}
+
 
 def is_2a(name: str) -> bool:
     n = _norm(name)
-    return n in _2A or (bool(re.search(r"\bvotos?\b", n)) and any(
-        t in n for t in ("relator","relatores","relatora","relatoras","relatres")))
+    return n in _2A or (
+        bool(re.search(r"\bvotos?\b", n))
+        and any(t in n for t in ("relator", "relatores", "relatora", "relatoras", "relatres"))
+    )
+
 
 _1A_RE = re.compile(r"^sessao[^\d]+(\d{3})\b")
+
+
 def is_1a(name: str) -> bool:
     m = _1A_RE.match(_norm(name))
     # As sessões continuam crescendo; limitar a 449 fazia as novas deixarem de
@@ -432,9 +468,10 @@ def is_1a(name: str) -> bool:
 # Dataclasses
 # =============================================================================
 
+
 @dataclass
 class DownloadItem:
-    file_id:   str
+    file_id: str
     file_name: str
     file_size: str | None
     destination: Path
@@ -443,18 +480,18 @@ class DownloadItem:
 
 @dataclass
 class Stats:
-    _lock:       threading.Lock  = field(default_factory=threading.Lock)
-    total:       int = 0          # cresce conforme indexação descobre arquivos
-    indexed:     int = 0          # pastas-raiz concluídas
-    downloaded:  int = 0
-    skipped:     int = 0
-    pulados:      int = 0   # --continuar: já feitos, pulados sem baixar
-    organized:    int = 0
-    sem_ato:      int = 0
-    autos_total:  int = 0   # autos encontrados nos votos
-    autos_done:   int = 0   # autos consultados no SIF (cache hit ou query nova)
-    errors:       list[str] = field(default_factory=list)
-    ato_counter:  Counter   = field(default_factory=Counter)
+    _lock: threading.Lock = field(default_factory=threading.Lock)
+    total: int = 0  # cresce conforme indexação descobre arquivos
+    indexed: int = 0  # pastas-raiz concluídas
+    downloaded: int = 0
+    skipped: int = 0
+    pulados: int = 0  # --continuar: já feitos, pulados sem baixar
+    organized: int = 0
+    sem_ato: int = 0
+    autos_total: int = 0  # autos encontrados nos votos
+    autos_done: int = 0  # autos consultados no SIF (cache hit ou query nova)
+    errors: list[str] = field(default_factory=list)
+    ato_counter: Counter = field(default_factory=Counter)
 
     def inc(self, attr: str, by: int = 1):
         with self._lock:
@@ -474,17 +511,17 @@ class Stats:
     def snapshot(self) -> dict:
         with self._lock:
             return {
-                "total":       self.total,
-                "indexed":     self.indexed,
-                "downloaded":  self.downloaded,
-                "skipped":     self.skipped,
-                "pulados":     self.pulados,
-                "organized":   self.organized,
-                "sem_ato":     self.sem_ato,
+                "total": self.total,
+                "indexed": self.indexed,
+                "downloaded": self.downloaded,
+                "skipped": self.skipped,
+                "pulados": self.pulados,
+                "organized": self.organized,
+                "sem_ato": self.sem_ato,
                 "autos_total": self.autos_total,
-                "autos_done":  self.autos_done,
-                "errors":      len(self.errors),
-                "ato":         list(self.ato_counter.most_common(12)),
+                "autos_done": self.autos_done,
+                "errors": len(self.errors),
+                "ato": list(self.ato_counter.most_common(12)),
             }
 
 
@@ -492,14 +529,17 @@ class Stats:
 # Utilitários
 # =============================================================================
 
+
 def _san(v: str, fb: str = "sem_nome") -> str:
     v = unicodedata.normalize("NFC", v).strip()
     v = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", v)
     v = re.sub(r"\s+", " ", v).strip(" .")
     return v or fb
 
+
 def _san_dir(v: str) -> str:
     return re.sub(r'[\\/:*?"<>|]', "_", v)
+
 
 def _token_palavra(palavra: str) -> str:
     """Normaliza palavra final ignorando pontuação: 'da,' -> 'DA'."""
@@ -509,20 +549,23 @@ def _token_palavra(palavra: str) -> str:
 def _palavra_final_solta(palavra: str) -> bool:
     return _token_palavra(palavra) in Tuning.PALAVRAS_FINAIS_SOLTAS
 
+
 # Lixo que o SIF às vezes mistura no "ato": valores numéricos de colunas vizinhas
 # (MEDIDA AFERIDA / BASE PARA CÁLCULO) e o próprio rótulo "AFERIDA". Removidos do
 # nome da pasta para não fragmentar atos iguais em pastas diferentes.
 _AFERIDA_RE = re.compile(r"\bAFERIDA\w*", re.IGNORECASE)
 # número (inclui separadores internos . , como em 31.361,93) mas NÃO engole a
 # pontuação final: tem que terminar em dígito, senão a vírgula real some.
-_NUM_RE     = re.compile(r"\d[\d.,]*\d|\d")
-_ESP_PONT_RE = re.compile(r"\s+([,.;:])")   # "X ," -> "X,"
+_NUM_RE = re.compile(r"\d[\d.,]*\d|\d")
+_ESP_PONT_RE = re.compile(r"\s+([,.;:])")  # "X ," -> "X,"
+
 
 def _limpar_ato(nome: str) -> str:
     nome = _AFERIDA_RE.sub(" ", nome)
     nome = _NUM_RE.sub(" ", nome)
     nome = _ESP_PONT_RE.sub(r"\1", nome)
     return " ".join(nome.split())
+
 
 def nome_pasta_do_ato(ato: str, max_palavras: int = Tuning.MAX_PALAVRAS_ATO) -> str:
     """
@@ -546,8 +589,10 @@ def nome_pasta_do_ato(ato: str, max_palavras: int = Tuning.MAX_PALAVRAS_ATO) -> 
     nome = " ".join(palavras[:n]).strip(" .,_")
     return nome[:120].rstrip(" .,_") if len(nome) > 120 else nome
 
+
 def _eq(v: str) -> str:
-    return v.replace("\\","\\\\").replace("'","\\'")
+    return v.replace("\\", "\\\\").replace("'", "\\'")
+
 
 def _skip(path: Path, size: str | None) -> bool:
     if not path.exists() or not size:
@@ -557,16 +602,24 @@ def _skip(path: Path, size: str | None) -> bool:
     except (OSError, ValueError):
         return False
 
+
 def _iter(service, query: str, fields: str) -> Iterable[dict]:
     token = None
     while True:
         r = _retry(
-            lambda: service.files().list(
-                q=query, spaces="drive",
-                fields=f"nextPageToken,files({fields})",
-                pageSize=1000, pageToken=token,
-                supportsAllDrives=True, includeItemsFromAllDrives=True,
-            ).execute(),
+            lambda token=token: (
+                service.files()
+                .list(
+                    q=query,
+                    spaces="drive",
+                    fields=f"nextPageToken,files({fields})",
+                    pageSize=1000,
+                    pageToken=token,
+                    supportsAllDrives=True,
+                    includeItemsFromAllDrives=True,
+                )
+                .execute()
+            ),
             what="Drive list",
         )
         yield from r.get("files", [])
@@ -574,12 +627,14 @@ def _iter(service, query: str, fields: str) -> Iterable[dict]:
         if not token:
             break
 
+
 def _resolve(item: dict) -> dict:
     d = item.get("shortcutDetails") or {}
     tid, tmime = d.get("targetId"), d.get("targetMimeType")
     if not tid or not tmime:
         return item
     return {**item, "id": tid, "mimeType": tmime, "name": item.get("name") or tid}
+
 
 def _unique(path: Path, seen: set[Path]) -> Path:
     if not path.exists() and path not in seen:
@@ -606,8 +661,7 @@ def _fmt_datetime(ts: float) -> str:
     return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(ts))
 
 
-def _eta(stats_snapshot: dict, total_folders: int, done_count: int,
-         start_time: float, now: float) -> tuple[str, str]:
+def _eta(stats_snapshot: dict, total_folders: int, done_count: int, start_time: float, now: float) -> tuple[str, str]:
     elapsed = max(now - start_time, 0.0)
     rate = done_count / elapsed if elapsed > 0 and done_count > 0 else 0.0
     if rate <= 0:
@@ -624,8 +678,7 @@ def _eta(stats_snapshot: dict, total_folders: int, done_count: int,
     remaining = max(total_items - done_count, 0)
     eta_seconds = remaining / rate
     return _fmt_datetime(now + eta_seconds), (
-        f"{_fmt_duration(eta_seconds)} restantes, {estimate_kind}, "
-        f"{rate:.1f} arquivos/s"
+        f"{_fmt_duration(eta_seconds)} restantes, {estimate_kind}, {rate:.1f} arquivos/s"
     )
 
 
@@ -646,8 +699,10 @@ def _retry(fn, *, what: str, base: float = Tuning.RETRY_BACKOFF, cap: float = Tu
             if _RETRY_MAX and attempt >= _RETRY_MAX:
                 raise
             delay = min(base * (2 ** (attempt - 1)), cap)
-            print(f"[retry] {what}: tentativa {attempt} falhou ({exc!r}); "
-                  f"pausando {delay:.0f}s e tentando de novo", flush=True)
+            print(
+                f"[retry] {what}: tentativa {attempt} falhou ({exc!r}); pausando {delay:.0f}s e tentando de novo",
+                flush=True,
+            )
             time.sleep(delay)
 
 
@@ -673,6 +728,7 @@ def _extract_ato(text: str) -> str:
 
 # --- Leitura do voto conforme o formato (a única diferença PDF vs Word) -------
 
+
 def _soffice_cmd() -> list[str] | None:
     """Comando do LibreOffice (nativo no PATH ou via flatpak), p/ converter .doc."""
     for c in ("soffice", "libreoffice"):
@@ -685,6 +741,7 @@ def _soffice_cmd() -> list[str] | None:
     if Path(direct).exists():
         return [direct]
     return None
+
 
 _SOFFICE = _soffice_cmd()
 _DOC_SEM = threading.Semaphore(Tuning.DOC_CONVERT_CONCURRENCY)
@@ -702,10 +759,20 @@ def _texto_doc(path: Path) -> str | None:
             prof, out = tmp / "profile", tmp / "out"
             out.mkdir()
             subprocess.run(
-                _SOFFICE + ["--headless", f"-env:UserInstallation=file://{prof}",
-                            "--convert-to", "txt:Text", "--outdir", str(out), str(path)],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                timeout=180, check=False,
+                [
+                    *_SOFFICE,
+                    "--headless",
+                    f"-env:UserInstallation=file://{prof}",
+                    "--convert-to",
+                    "txt:Text",
+                    "--outdir",
+                    str(out),
+                    str(path),
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=180,
+                check=False,
             )
             txts = list(out.glob("*.txt"))
             return txts[0].read_text(encoding="utf-8", errors="ignore") if txts else None
@@ -715,14 +782,14 @@ def _texto_doc(path: Path) -> str | None:
             shutil.rmtree(tmp, ignore_errors=True)
 
 
-def _extrair_texto(item: "DownloadItem") -> str | None:
+def _extrair_texto(item: DownloadItem) -> str | None:
     """Texto do voto conforme o tipo (pela extensão). None => não deu pra ler."""
     ext = item.destination.suffix.lower()
     try:
         if ext == ".pdf":
             with pdfplumber.open(item.destination) as pdf:
                 return "\n".join(p.extract_text() or "" for p in pdf.pages[:3])
-        if ext == ".txt":   # Google Docs exportado para texto
+        if ext == ".txt":  # Google Docs exportado para texto
             return item.destination.read_text(encoding="utf-8", errors="ignore")
         if ext == ".docx":
             return None if docx2txt is None else (docx2txt.process(str(item.destination)) or "")
@@ -778,16 +845,14 @@ class CsvWriter:
             self.rows += 1
 
     def close(self) -> None:
-        with self._lock:
-            try:
-                self._fh.close()
-            except Exception:
-                pass
+        with self._lock, contextlib.suppress(Exception):
+            self._fh.close()
 
 
 # =============================================================================
 # Autenticação
 # =============================================================================
+
 
 def _load_creds(creds_path: Path, token_path: Path) -> Credentials:
     if not creds_path.exists():
@@ -804,6 +869,7 @@ def _load_creds(creds_path: Path, token_path: Path) -> Credentials:
         token_path.write_text(creds.to_json(), encoding="utf-8")
     return creds
 
+
 def _new_service(token_path: Path):
     """Service Drive independente por thread."""
     creds = Credentials.from_authorized_user_file(str(token_path), SCOPES)
@@ -816,24 +882,36 @@ def _new_service(token_path: Path):
 # e os coloca diretamente na download_queue.
 # =============================================================================
 
+
 def index_worker(
-    token_path:    Path,
-    folder:        dict,
-    folder_dest:   Path,
-    instancia:     str,
+    token_path: Path,
+    folder: dict,
+    folder_dest: Path,
+    instancia: str,
     allowed_mimes: set[str],
-    download_queue: "queue.Queue",
-    seen_files:    set[str],
-    seen_lock:     threading.Lock,
-    planned:       set[Path],
-    planned_lock:  threading.Lock,
-    stats:         Stats,
-    db:            "CacheDB | None" = None,
+    download_queue: queue.Queue,
+    seen_files: set[str],
+    seen_lock: threading.Lock,
+    planned: set[Path],
+    planned_lock: threading.Lock,
+    stats: Stats,
+    db: CacheDB | None = None,
 ) -> None:
     service = _new_service(token_path)
-    ok = _recurse(service, folder["id"], folder_dest, instancia, allowed_mimes,
-                  seen_files, seen_lock, planned, planned_lock,
-                  stats, download_queue, db)
+    ok = _recurse(
+        service,
+        folder["id"],
+        folder_dest,
+        instancia,
+        allowed_mimes,
+        seen_files,
+        seen_lock,
+        planned,
+        planned_lock,
+        stats,
+        download_queue,
+        db,
+    )
     if ok:
         if db:
             db.mark_folder_indexed(folder, instancia)
@@ -843,18 +921,27 @@ def index_worker(
 
 
 def _recurse(
-    service, folder_id: str, local_dir: Path, instancia: str, allowed_mimes: set[str],
-    seen_files: set[str], seen_lock: threading.Lock,
-    planned: set[Path], planned_lock: threading.Lock,
-    stats: Stats, download_queue: "queue.Queue",
-    db: "CacheDB | None" = None,
+    service,
+    folder_id: str,
+    local_dir: Path,
+    instancia: str,
+    allowed_mimes: set[str],
+    seen_files: set[str],
+    seen_lock: threading.Lock,
+    planned: set[Path],
+    planned_lock: threading.Lock,
+    stats: Stats,
+    download_queue: queue.Queue,
+    db: CacheDB | None = None,
 ) -> bool:
     try:
-        children = list(_iter(
-            service,
-            f"('{_eq(folder_id)}' in parents) and (trashed=false)",
-            "id,name,mimeType,size,shortcutDetails",
-        ))
+        children = list(
+            _iter(
+                service,
+                f"('{_eq(folder_id)}' in parents) and (trashed=false)",
+                "id,name,mimeType,size,shortcutDetails",
+            )
+        )
     except HttpError as exc:
         stats.add_error(f"Listar {folder_id}: {exc}")
         return False
@@ -862,16 +949,27 @@ def _recurse(
     ok = True
     for raw in children:
         c = _resolve(raw)
-        cid  = c.get("id")
+        cid = c.get("id")
         if not cid:
             continue
         cname = _san(c.get("name", cid))
         cmime = c.get("mimeType")
 
         if cmime == FOLDER_MIME:
-            child_ok = _recurse(service, cid, local_dir / cname, instancia, allowed_mimes,
-                                seen_files, seen_lock, planned, planned_lock,
-                                stats, download_queue, db)
+            child_ok = _recurse(
+                service,
+                cid,
+                local_dir / cname,
+                instancia,
+                allowed_mimes,
+                seen_files,
+                seen_lock,
+                planned,
+                planned_lock,
+                stats,
+                download_queue,
+                db,
+            )
             ok = ok and child_ok
             continue
 
@@ -884,7 +982,7 @@ def _recurse(
             seen_files.add(cid)
 
         fname = _fname_para(cname, cmime)
-        dest  = local_dir / fname
+        dest = local_dir / fname
 
         if _skip(dest, c.get("size")):
             stats.inc("total")
@@ -913,26 +1011,26 @@ def _recurse(
 # Consome download_queue, baixa o arquivo, empurra para organize_queue.
 # =============================================================================
 
+
 def download_worker(
-    token_path:      Path,
-    download_queue:  "queue.Queue",
-    organize_queue:  "queue.Queue",
-    stats:           Stats,
+    token_path: Path,
+    download_queue: queue.Queue,
+    organize_queue: queue.Queue,
+    stats: Stats,
     skip_done=None,
 ) -> None:
     service = _new_service(token_path)
     while True:
         item = download_queue.get()
         if item is _SENTINEL:
-            download_queue.put(_SENTINEL)   # propaga para outros workers
+            download_queue.put(_SENTINEL)  # propaga para outros workers
             return
         try:
             if skip_done is not None and skip_done(item):
-                stats.inc("pulados")        # --continuar: já feito, não re-baixa
+                stats.inc("pulados")  # --continuar: já feito, não re-baixa
                 continue
             if not _skip(item.destination, item.file_size):
-                _retry(lambda: _do_download(service, item),
-                       what=f"Download {item.file_name}")
+                _retry(lambda item=item: _do_download(service, item), what=f"Download {item.file_name}")
                 stats.inc("downloaded")
             organize_queue.put(item)
         except Exception as exc:
@@ -942,7 +1040,7 @@ def download_worker(
 def _do_download(service, item: DownloadItem) -> None:
     dest = item.destination
     dest.parent.mkdir(parents=True, exist_ok=True)
-    if dest.suffix.lower() == ".txt":   # Google Docs nativo: exporta p/ texto
+    if dest.suffix.lower() == ".txt":  # Google Docs nativo: exporta p/ texto
         req = service.files().export_media(fileId=item.file_id, mimeType="text/plain")
     else:
         req = service.files().get_media(fileId=item.file_id, supportsAllDrives=True)
@@ -960,26 +1058,30 @@ def _do_download(service, item: DownloadItem) -> None:
 # Consome organize_queue, extrai autos, consulta SIF, copia para pasta do ato.
 # =============================================================================
 
+
 class SifClient:
     """Rate-limit global; HTTP+parse em paralelo (sem lock no I/O)."""
 
     def __init__(self, rate: float = Tuning.SIF_RATE):
-        self._session:      "requests.Session | None" = None
-        self._sess_lock     = threading.Lock()
-        self._cache:        dict[str, tuple[str | None, str | None]] = {}
-        self._cache_lock    = threading.Lock()
+        self._session: requests.Session | None = None
+        self._sess_lock = threading.Lock()
+        self._cache: dict[str, tuple[str | None, str | None]] = {}
+        self._cache_lock = threading.Lock()
         self._throttle_lock = threading.Lock()
-        self._interval      = 1.0 / max(rate, 0.1)
-        self._last          = 0.0
+        self._interval = 1.0 / max(rate, 0.1)
+        self._last = 0.0
 
-    def _session_(self) -> "requests.Session":
+    def _session_(self) -> requests.Session:
         with self._sess_lock:
             if self._session is None:
                 s = requests.Session()
                 s.headers["User-Agent"] = "Mozilla/5.0"
                 try:
-                    s.post(LOGIN_URL, data={"login": LOGIN_USER, "password": LOGIN_PASS,
-                                            "Button_DoLogin": "Login"}, timeout=30).raise_for_status()
+                    s.post(
+                        LOGIN_URL,
+                        data={"login": LOGIN_USER, "password": LOGIN_PASS, "Button_DoLogin": "Login"},
+                        timeout=30,
+                    ).raise_for_status()
                 except Exception as e:
                     print(f"[SIF] login: {e}", flush=True)
                 self._session = s
@@ -1008,7 +1110,7 @@ class SifClient:
             self._cache[key] = result
         return result
 
-    def _query(self, s: "requests.Session", idn: str, tipo: str) -> tuple[str | None, str | None]:
+    def _query(self, s: requests.Session, idn: str, tipo: str) -> tuple[str | None, str | None]:
         # Falha de rede/HTTP sobe para o _retry (pausa e tenta de novo).
         r = s.get(AUTO_URL, params={"Idn_Doct_Lavr": idn, "Tip_Auto": tipo}, timeout=30)
         r.raise_for_status()
@@ -1025,7 +1127,7 @@ class SifClient:
         lei = None
         pos = txt.upper().find("DISPOSITIVO LEGAL TRANSGREDIDO")
         if pos != -1:
-            m = LEI_RE.search(txt[pos: pos + 400])
+            m = LEI_RE.search(txt[pos : pos + 400])
             if m:
                 lei = re.sub(r"\s+", " ", m.group(0).upper()).strip()
         # Ato/fato constitutivo da infração (do mesmo PDF do auto)
@@ -1034,12 +1136,12 @@ class SifClient:
 
 
 def organize_worker(
-    organize_queue: "queue.Queue",
-    sif:            SifClient,
-    ato_dir:        Path,
-    stats:          Stats,
-    csv_writer:     "CsvWriter | None" = None,
-    db:             "CacheDB | None" = None,
+    organize_queue: queue.Queue,
+    sif: SifClient,
+    ato_dir: Path,
+    stats: Stats,
+    csv_writer: CsvWriter | None = None,
+    db: CacheDB | None = None,
 ) -> None:
     while True:
         item = organize_queue.get()
@@ -1112,17 +1214,20 @@ def eh_documento_de_sessao_nao_decisao(nome: str, texto: str) -> bool:
     return bool(motivo_documento_de_sessao_nao_decisao(nome, texto))
 
 
-def _do_organize(item: DownloadItem, sif: SifClient, ato_dir: Path, stats: Stats,
-                 csv_writer: "CsvWriter | None" = None,
-                 db: "CacheDB | None" = None) -> None:
+def _do_organize(
+    item: DownloadItem,
+    sif: SifClient,
+    ato_dir: Path,
+    stats: Stats,
+    csv_writer: CsvWriter | None = None,
+    db: CacheDB | None = None,
+) -> None:
     try:
         _organizar(item, sif, ato_dir, stats, csv_writer, db)
     finally:
         # Deleta o bruto após processar, independente do resultado
-        try:
+        with contextlib.suppress(Exception):
             item.destination.unlink(missing_ok=True)
-        except Exception:
-            pass
 
 
 def _nome_lei(lei: str | None) -> str:
@@ -1132,8 +1237,7 @@ def _nome_lei(lei: str | None) -> str:
 def _copiar_para_lei_ato(item: DownloadItem, pares: Iterable[tuple], out_dir: Path, stats: Stats) -> None:
     # Estrutura LEI/ATO: out_dir/instancia/<LEI>/<ATO>/voto. Dedup por (lei, ato)
     # já encurtados — pares distintos podem cair no mesmo destino.
-    destinos = sorted({(_nome_lei(lei), nome_pasta_do_ato(ato))
-                       for lei, ato in pares if ato})
+    destinos = sorted({(_nome_lei(lei), nome_pasta_do_ato(ato)) for lei, ato in pares if ato})
     for nome_lei, nome_ato in destinos:
         if not nome_ato:
             continue
@@ -1146,11 +1250,10 @@ def _copiar_para_lei_ato(item: DownloadItem, pares: Iterable[tuple], out_dir: Pa
         stats.add_ato(f"{nome_lei}/{nome_ato}", item.instancia)
 
 
-def _escrever_csv(csv_writer: "CsvWriter | None", protocolo: str, assunto: str,
-                  atos: list[str]) -> None:
+def _escrever_csv(csv_writer: CsvWriter | None, protocolo: str, assunto: str, atos: list[str]) -> None:
     if csv_writer is None:
         return
-    ato_cell = " | ".join(atos)   # atos distintos do(s) auto(s), 1 linha por voto
+    ato_cell = " | ".join(atos)  # atos distintos do(s) auto(s), 1 linha por voto
     if protocolo or assunto or ato_cell:
         csv_writer.write_row(protocolo, assunto, ato_cell)
 
@@ -1164,9 +1267,14 @@ def _atos_distintos(pares: Iterable[tuple]) -> list[str]:
     return atos
 
 
-def _organizar(item: DownloadItem, sif: SifClient, ato_dir: Path, stats: Stats,
-               csv_writer: "CsvWriter | None" = None,
-               db: "CacheDB | None" = None) -> None:
+def _organizar(
+    item: DownloadItem,
+    sif: SifClient,
+    ato_dir: Path,
+    stats: Stats,
+    csv_writer: CsvWriter | None = None,
+    db: CacheDB | None = None,
+) -> None:
     # Lê o voto conforme o formato (PDF/Word/Docs) — filtro de decisão + dados.
     txt = _extrair_texto(item)
     if txt is None:
@@ -1191,7 +1299,7 @@ def _organizar(item: DownloadItem, sif: SifClient, ato_dir: Path, stats: Stats,
         return
 
     protocolo = _extract_protocolo(item.file_name, txt)
-    assunto   = _extract_assunto(txt)
+    assunto = _extract_assunto(txt)
 
     # Pares (lei, ato) por voto: do cache ou consultando o SIF (por auto). Cada
     # auto dá um par lei↔ato, que vira a estrutura LEI/ATO. O ato vem do PDF do AUTO.
@@ -1218,7 +1326,7 @@ def _organizar(item: DownloadItem, sif: SifClient, ato_dir: Path, stats: Stats,
     for idn, tipo in autos:
         lei, ato = sif.consultar_auto(idn, tipo)
         stats.inc("autos_done")
-        if ato:                       # só organiza autos que têm ato
+        if ato:  # só organiza autos que têm ato
             pares.append((lei or "", ato))
 
     atos = _atos_distintos(pares)
@@ -1238,25 +1346,26 @@ def _organizar(item: DownloadItem, sif: SifClient, ato_dir: Path, stats: Stats,
 # Display
 # =============================================================================
 
+
 def _display(
-    stats:          Stats,
-    total_folders:  int,
-    download_q:     "queue.Queue",
-    organize_q:     "queue.Queue",
-    start_time:      float,
-    stop:           threading.Event,
+    stats: Stats,
+    total_folders: int,
+    download_q: queue.Queue,
+    organize_q: queue.Queue,
+    start_time: float,
+    stop: threading.Event,
 ) -> None:
     while not stop.wait(3):
-        s    = stats.snapshot()
-        now  = time.time()
-        ts   = time.strftime("%H:%M:%S", time.localtime(now))
+        s = stats.snapshot()
+        now = time.time()
+        ts = time.strftime("%H:%M:%S", time.localtime(now))
 
         # Progresso real = totalmente processados (organizados + sem_ato + pulados) / descobertos
         done_count = s["organized"] + s["sem_ato"] + s["pulados"]
-        pct_done  = (done_count / s["total"] * 100) if s["total"] else 0
+        pct_done = (done_count / s["total"] * 100) if s["total"] else 0
 
         # Progresso SIF = autos verificados / autos encontrados
-        pct_sif   = (s["autos_done"] / s["autos_total"] * 100) if s["autos_total"] else 0
+        pct_sif = (s["autos_done"] / s["autos_total"] * 100) if s["autos_total"] else 0
         eta_at, eta_desc = _eta(s, total_folders, done_count, start_time, now)
 
         lines = [
@@ -1265,14 +1374,16 @@ def _display(
             f"Início          : {_fmt_datetime(start_time)}",
             f"Transcorrido    : {_fmt_duration(now - start_time)}",
             f"Previsão fim    : {eta_at} ({eta_desc})",
-            f"",
+            "",
             f"Pastas indexadas : {s['indexed']:>4} / {total_folders}",
             f"Arquivos descob. : {s['total']}",
-            f"Baixados         : {s['downloaded'] + s['skipped']:>6}  ({s['downloaded']} novos + {s['skipped']} já tinham)" + (f"  |  pulados: {s['pulados']}" if s['pulados'] else ""),
-            f"",
+            f"Baixados         : {s['downloaded'] + s['skipped']:>6}  "
+            f"({s['downloaded']} novos + {s['skipped']} já tinham)"
+            + (f"  |  pulados: {s['pulados']}" if s["pulados"] else ""),
+            "",
             f"Progresso geral  : {done_count:>6} / {s['total']}  ({pct_done:.1f}%)",
             f"Autos verificados: {s['autos_done']:>6} / {s['autos_total']}  ({pct_sif:.1f}%)",
-            f"",
+            "",
             f"Fila download    : {download_q.qsize():>4}  |  Fila organizar: {organize_q.qsize():>4}",
             f"Organizados      : {s['organized']:>6}  |  Sem ato: {s['sem_ato']}  |  Erros: {s['errors']}",
         ]
@@ -1288,32 +1399,81 @@ def _display(
 # Main
 # =============================================================================
 
+
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Pipeline contínuo: indexa → baixa → organiza por ato (PDF + Word).")
-    p.add_argument("--tipos",            default="pdf,gdoc,docx,doc",
-                   help="Formatos a processar, separados por vírgula: pdf,gdoc,docx,doc (padrão: todos). "
-                        "Para incluir Word num índice já feito só de PDF, rode com --refresh-index.")
-    p.add_argument("--doc-concurrency",  type=int, default=Tuning.DOC_CONVERT_CONCURRENCY,
-                   help=f"Conversões LibreOffice (.doc) simultâneas (padrão: {Tuning.DOC_CONVERT_CONCURRENCY})")
-    p.add_argument("--output",           default="votos_relatores_pdfs")
-    p.add_argument("--ato-output",       default="pdfs_por_lei_e_ato", help="Saída: <dir>/<instancia>/<LEI>/<ATO>/voto (padrão: pdfs_por_lei_e_ato)")
-    p.add_argument("--credentials",      default="credentials.json")
-    p.add_argument("--token",            default="token.json")
-    p.add_argument("--cache",            default="pipeline_cache.db", help="Arquivo SQLite de cache (padrão: pipeline_cache.db)")
-    p.add_argument("--instancia",        choices=["1","2","ambas"], default="ambas")
-    p.add_argument("--index-workers",    type=int,   default=Tuning.INDEX_WORKERS,    help=f"Workers de indexação (padrão: {Tuning.INDEX_WORKERS})")
-    p.add_argument("--download-workers", type=int,   default=Tuning.DOWNLOAD_WORKERS, help=f"Workers de download (padrão: {Tuning.DOWNLOAD_WORKERS})")
-    p.add_argument("--organize-workers", type=int,   default=Tuning.ORGANIZE_WORKERS, help=f"Workers de organização (padrão: {Tuning.ORGANIZE_WORKERS})")
-    p.add_argument("--sif-rate",         type=float, default=Tuning.SIF_RATE,         help=f"Consultas SIF/s (padrão: {Tuning.SIF_RATE})")
-    p.add_argument("--csv-output",       default="assuntos.csv",  help="CSV com protocolo/assunto/ato das decisões (padrão: assuntos.csv)")
-    p.add_argument("--no-csv",           action="store_true",     help="Não gera o assuntos.csv")
-    p.add_argument("--fresh-csv",        action="store_true",     help="Recria o CSV do zero; por padrão, retoma em append sem duplicar linhas")
-    p.add_argument("--max-retries",      type=int,   default=Tuning.MAX_RETRIES, help=f"Máx. tentativas em falhas de rede antes de desistir do item; 0 = infinito (padrão: {Tuning.MAX_RETRIES})")
-    p.add_argument("--so-download",      action="store_true",     help="Só baixa, sem organizar")
-    p.add_argument("--refresh-index",    action="store_true",     help="Ignora cache de índice e reindexe o Drive")
-    p.add_argument("--refresh-sif",      action="store_true",     help="Ignora cache SIF e reconsulta todos os autos")
-    p.add_argument("--no-cache",         action="store_true",     help="Desativa o cache completamente")
-    p.add_argument("--continuar",        action="store_true",     help="Retoma sem re-baixar tudo: pula votos já organizados (arquivo já na saída por ato, ou sem par no cache) e baixa só o que falta")
+    p.add_argument(
+        "--tipos",
+        default="pdf,gdoc,docx,doc",
+        help="Formatos a processar, separados por vírgula: pdf,gdoc,docx,doc (padrão: todos). "
+        "Para incluir Word num índice já feito só de PDF, rode com --refresh-index.",
+    )
+    p.add_argument(
+        "--doc-concurrency",
+        type=int,
+        default=Tuning.DOC_CONVERT_CONCURRENCY,
+        help=f"Conversões LibreOffice (.doc) simultâneas (padrão: {Tuning.DOC_CONVERT_CONCURRENCY})",
+    )
+    p.add_argument("--output", default="votos_relatores_pdfs")
+    p.add_argument(
+        "--ato-output",
+        default="pdfs_por_lei_e_ato",
+        help="Saída: <dir>/<instancia>/<LEI>/<ATO>/voto (padrão: pdfs_por_lei_e_ato)",
+    )
+    p.add_argument("--credentials", default="credentials.json")
+    p.add_argument("--token", default="token.json")
+    p.add_argument("--cache", default="pipeline_cache.db", help="Arquivo SQLite de cache (padrão: pipeline_cache.db)")
+    p.add_argument("--instancia", choices=["1", "2", "ambas"], default="ambas")
+    p.add_argument(
+        "--index-workers",
+        type=int,
+        default=Tuning.INDEX_WORKERS,
+        help=f"Workers de indexação (padrão: {Tuning.INDEX_WORKERS})",
+    )
+    p.add_argument(
+        "--download-workers",
+        type=int,
+        default=Tuning.DOWNLOAD_WORKERS,
+        help=f"Workers de download (padrão: {Tuning.DOWNLOAD_WORKERS})",
+    )
+    p.add_argument(
+        "--organize-workers",
+        type=int,
+        default=Tuning.ORGANIZE_WORKERS,
+        help=f"Workers de organização (padrão: {Tuning.ORGANIZE_WORKERS})",
+    )
+    p.add_argument(
+        "--sif-rate", type=float, default=Tuning.SIF_RATE, help=f"Consultas SIF/s (padrão: {Tuning.SIF_RATE})"
+    )
+    p.add_argument(
+        "--csv-output", default="assuntos.csv", help="CSV com protocolo/assunto/ato das decisões (padrão: assuntos.csv)"
+    )
+    p.add_argument("--no-csv", action="store_true", help="Não gera o assuntos.csv")
+    p.add_argument(
+        "--fresh-csv",
+        action="store_true",
+        help="Recria o CSV do zero; por padrão, retoma em append sem duplicar linhas",
+    )
+    p.add_argument(
+        "--max-retries",
+        type=int,
+        default=Tuning.MAX_RETRIES,
+        help=(
+            f"Máx. tentativas em falhas de rede antes de desistir do item; 0 = infinito (padrão: {Tuning.MAX_RETRIES})"
+        ),
+    )
+    p.add_argument("--so-download", action="store_true", help="Só baixa, sem organizar")
+    p.add_argument("--refresh-index", action="store_true", help="Ignora cache de índice e reindexe o Drive")
+    p.add_argument("--refresh-sif", action="store_true", help="Ignora cache SIF e reconsulta todos os autos")
+    p.add_argument("--no-cache", action="store_true", help="Desativa o cache completamente")
+    p.add_argument(
+        "--continuar",
+        action="store_true",
+        help=(
+            "Retoma sem re-baixar tudo: pula votos já organizados (arquivo já na saída por ato, "
+            "ou sem par no cache) e baixa só o que falta"
+        ),
+    )
     return p.parse_args()
 
 
@@ -1339,12 +1499,15 @@ def main() -> int:
     print(f"Tipos: {', '.join(tipos)}", flush=True)
 
     base = Path.cwd()
-    R = lambda s: Path(s) if Path(s).is_absolute() else base / s
-    output_dir   = R(args.output)
-    ato_dir      = R(args.ato_output)
-    creds_path   = R(args.credentials)
-    token_path   = R(args.token)
-    instancias   = ["1","2"] if args.instancia == "ambas" else [args.instancia]
+
+    def R(s):
+        return Path(s) if Path(s).is_absolute() else base / s
+
+    output_dir = R(args.output)
+    ato_dir = R(args.ato_output)
+    creds_path = R(args.credentials)
+    token_path = R(args.token)
+    instancias = ["1", "2"] if args.instancia == "ambas" else [args.instancia]
 
     # Cache SQLite
     db: CacheDB | None = None
@@ -1362,17 +1525,18 @@ def main() -> int:
     try:
         _load_creds(creds_path, token_path)
     except FileNotFoundError as e:
-        print(e, file=sys.stderr); return 2
+        print(e, file=sys.stderr)
+        return 2
 
     # Filas entre estágios
     download_queue: queue.Queue = queue.Queue(maxsize=500)
     organize_queue: queue.Queue = queue.Queue()
 
     # Estado compartilhado
-    stats        = Stats()
-    seen_files   = set[str]()
-    seen_lock    = threading.Lock()
-    planned      = set[Path]()
+    stats = Stats()
+    seen_files = set[str]()
+    seen_lock = threading.Lock()
+    planned = set[Path]()
     planned_lock = threading.Lock()
 
     # Writer do assuntos.csv (compartilhado pelos organize workers)
@@ -1404,34 +1568,42 @@ def main() -> int:
     skip_done = None
     if args.continuar:
         organizados = {p.name for p in ato_dir.rglob("*") if p.is_file()} if ato_dir.exists() else set()
+
         def skip_done(it: DownloadItem) -> bool:
-            if it.destination.name in organizados:
-                return True
-            if db and db.get_pares(it.file_id) == []:   # processado e sem par
-                return True
-            return False
+            # Já organizado, ou processado e sem par (lei, ato) no cache.
+            return it.destination.name in organizados or bool(db and db.get_pares(it.file_id) == [])
+
         print(f"--continuar: {len(organizados)} arquivos já em {ato_dir.name}/ serão pulados.", flush=True)
 
     if complete_index:
         total_folders = db.count_indexed_folders() if db else 0
         print(f"Cache de índice completo encontrado: {len(cached_items)} arquivos. Pulando indexação.", flush=True)
-        print(f"Iniciando pipeline: {args.download_workers} download / {args.organize_workers} organize workers\n", flush=True)
+        print(
+            f"Iniciando pipeline: {args.download_workers} download / {args.organize_workers} organize workers\n",
+            flush=True,
+        )
 
     else:
         # Indexação normal via API do Drive
         service = _new_service(token_path)
         configs = []
-        if "1" in instancias: configs.append(("1a_instancia","sess",is_1a))
-        if "2" in instancias: configs.append(("2a_instancia","voto",is_2a))
+        if "1" in instancias:
+            configs.append(("1a_instancia", "sess", is_1a))
+        if "2" in instancias:
+            configs.append(("2a_instancia", "voto", is_2a))
 
         all_folders: list[tuple[dict, Path, str]] = []
         for subpasta, hint, match_fn in configs:
             print(f"Buscando pastas {subpasta}...", flush=True)
-            folders = [f for f in _iter(
-                service,
-                f"(trashed=false) and (mimeType='{FOLDER_MIME}') and (name contains '{hint}')",
-                "id,name,mimeType,shortcutDetails",
-            ) if match_fn(f.get("name",""))]
+            folders = [
+                f
+                for f in _iter(
+                    service,
+                    f"(trashed=false) and (mimeType='{FOLDER_MIME}') and (name contains '{hint}')",
+                    "id,name,mimeType,shortcutDetails",
+                )
+                if match_fn(f.get("name", ""))
+            ]
             print(f"  {len(folders)} pastas encontradas", flush=True)
             inst_dir = output_dir / subpasta
             for f in folders:
@@ -1446,14 +1618,16 @@ def main() -> int:
                 stats.add("indexed", indexed_roots)
                 print(f"Retomada: {indexed_roots}/{total_folders} pastas-raiz já indexadas.", flush=True)
         folders_to_index = [
-            (folder, dest, subpasta)
-            for folder, dest, subpasta in all_folders
-            if folder["id"] not in indexed_folder_ids
+            (folder, dest, subpasta) for folder, dest, subpasta in all_folders if folder["id"] not in indexed_folder_ids
         ]
         if cached_items:
             print(f"Retomada: {len(cached_items)} arquivos já descobertos serão reaproveitados.", flush=True)
         print(f"\nTotal de pastas-raiz: {total_folders}", flush=True)
-        print(f"Iniciando pipeline: {args.index_workers} index / {args.download_workers} download / {args.organize_workers} organize workers\n", flush=True)
+        print(
+            f"Iniciando pipeline: {args.index_workers} index / {args.download_workers} download / "
+            f"{args.organize_workers} organize workers\n",
+            flush=True,
+        )
 
     # Display thread
     stop = threading.Event()
@@ -1469,12 +1643,16 @@ def main() -> int:
     org_pool = ThreadPoolExecutor(max_workers=args.organize_workers, thread_name_prefix="org")
     org_futs = []
     if sif:
-        org_futs = [org_pool.submit(organize_worker, organize_queue, sif, ato_dir, stats, csv_writer, db)
-                    for _ in range(args.organize_workers)]
+        org_futs = [
+            org_pool.submit(organize_worker, organize_queue, sif, ato_dir, stats, csv_writer, db)
+            for _ in range(args.organize_workers)
+        ]
 
     dl_pool = ThreadPoolExecutor(max_workers=args.download_workers, thread_name_prefix="dl")
-    dl_futs = [dl_pool.submit(download_worker, token_path, download_queue, organize_queue, stats, skip_done)
-               for _ in range(args.download_workers)]
+    dl_futs = [
+        dl_pool.submit(download_worker, token_path, download_queue, organize_queue, stats, skip_done)
+        for _ in range(args.download_workers)
+    ]
 
     enqueue_cached_items(cached_items)
 
@@ -1482,8 +1660,19 @@ def main() -> int:
         idx_pool = ThreadPoolExecutor(max_workers=args.index_workers, thread_name_prefix="idx")
         idx_futs = {
             idx_pool.submit(
-                index_worker, token_path, folder, dest, subpasta, allowed_mimes,
-                download_queue, seen_files, seen_lock, planned, planned_lock, stats, db,
+                index_worker,
+                token_path,
+                folder,
+                dest,
+                subpasta,
+                allowed_mimes,
+                download_queue,
+                seen_files,
+                seen_lock,
+                planned,
+                planned_lock,
+                stats,
+                db,
             ): folder
             for folder, dest, subpasta in folders_to_index
         }
@@ -1509,8 +1698,10 @@ def main() -> int:
     # Sinaliza fim para download workers
     download_queue.put(_SENTINEL)
     for fut in as_completed(dl_futs):
-        try: fut.result()
-        except Exception as exc: stats.add_error(f"DL worker: {exc}")
+        try:
+            fut.result()
+        except Exception as exc:
+            stats.add_error(f"DL worker: {exc}")
     dl_pool.shutdown(wait=True)
 
     print("\n[Downloads concluídos — aguardando organização drenar...]\n", flush=True)
@@ -1519,8 +1710,10 @@ def main() -> int:
     if sif:
         organize_queue.put(_SENTINEL)
         for fut in as_completed(org_futs):
-            try: fut.result()
-            except Exception as exc: stats.add_error(f"Org worker: {exc}")
+            try:
+                fut.result()
+            except Exception as exc:
+                stats.add_error(f"Org worker: {exc}")
     org_pool.shutdown(wait=True)
 
     if csv_writer:
@@ -1538,7 +1731,7 @@ def main() -> int:
     print(f"Arquivos achados : {s['total']}")
     print(f"Baixados (novos) : {s['downloaded']}")
     print(f"Já estavam       : {s['skipped']}")
-    if s['pulados']:
+    if s["pulados"]:
         print(f"Pulados (--cont.): {s['pulados']}")
     print(f"Organizados      : {s['organized']}")
     print(f"Sem ato          : {s['sem_ato']}")
@@ -1552,8 +1745,10 @@ def main() -> int:
             print(f"  {cnt:>6}  {'1ª' if '1a' in inst else '2ª'}  {ato}")
     if stats.errors:
         print("\nErros:")
-        for e in stats.errors[:20]: print(f"  - {e}")
-        if len(stats.errors) > 20: print(f"  ... e mais {len(stats.errors)-20}")
+        for e in stats.errors[:20]:
+            print(f"  - {e}")
+        if len(stats.errors) > 20:
+            print(f"  ... e mais {len(stats.errors) - 20}")
 
     return 0 if not stats.errors else 1
 

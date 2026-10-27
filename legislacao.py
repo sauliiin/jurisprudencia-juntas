@@ -128,7 +128,7 @@ def html_para_texto(html: str) -> tuple[str, list[list[int]]]:
     texto = "".join(leitor.chars)
     riscado: list[list[int]] = []
     inicio = None
-    for i, r in enumerate(leitor.risco + [False]):
+    for i, r in enumerate([*leitor.risco, False]):
         if r and inicio is None:
             inicio = i
         elif not r and inicio is not None:
@@ -162,7 +162,8 @@ _ARTIGO = re.compile(
 _ITEM = re.compile(r"^[ \t]*(\d+[A-Z]?)[ \t]*(?:\||\t)", re.M)
 # "Planilha 2: Tabela do Código" é a aba da planilha, como o LibreOffice a exporta.
 _TITULO = re.compile(
-    r"^[ \t]*(Planilha(?= \d+:)|T[ÍI]TULO|CAP[ÍI]TULO|Cap[íi]tulo|CAP\.|SE[ÇC][ÃA]O|Se[çc][ãa]o|SUBSE[ÇC][ÃA]O|Subse[çc][ãa]o)\b.*$",
+    r"^[ \t]*(Planilha(?= \d+:)|T[ÍI]TULO|CAP[ÍI]TULO|Cap[íi]tulo|CAP\.|SE[ÇC][ÃA]O|Se[çc][ãa]o"
+    r"|SUBSE[ÇC][ÃA]O|Subse[çc][ãa]o)\b.*$",
     re.M,
 )
 
@@ -235,9 +236,13 @@ def dividir(texto: str, nome_arquivo: str, riscado: list[list[int]] | None = Non
     titulos = _titulos(texto)
     brutas: list[dict] = []
     if not cortes:
-        brutas.append({"tipo": "documento", "numero": "", "rotulo": "Documento inteiro", "inicio": 0, "fim": len(texto)})
+        brutas.append(
+            {"tipo": "documento", "numero": "", "rotulo": "Documento inteiro", "inicio": 0, "fim": len(texto)}
+        )
     elif not anexo and texto[: cortes[0].start()].strip():
-        brutas.append({"tipo": "preambulo", "numero": "", "rotulo": "Ementa e preâmbulo", "inicio": 0, "fim": cortes[0].start()})
+        brutas.append(
+            {"tipo": "preambulo", "numero": "", "rotulo": "Ementa e preâmbulo", "inicio": 0, "fim": cortes[0].start()}
+        )
     for k, m in enumerate(cortes):
         fim = cortes[k + 1].start() if k + 1 < len(cortes) else len(texto)
         if anexo:
@@ -272,7 +277,9 @@ def dividir(texto: str, nome_arquivo: str, riscado: list[list[int]] | None = Non
 
 # --- Citações nos autos do SIF -----------------------------------------------
 
-_CIT_NORMA = re.compile(r"\b(LEI|DECRETO|DEC)\.?\s*(?:MUNICIPAL\s*)?(?:N\s*[O.]?\s*)?(\d{1,2}\.?\d{3})(?:\s*/\s*\d{2,4})?")
+_CIT_NORMA = re.compile(
+    r"\b(LEI|DECRETO|DEC)\.?\s*(?:MUNICIPAL\s*)?(?:N\s*[O.]?\s*)?(\d{1,2}\.?\d{3})(?:\s*/\s*\d{2,4})?"
+)
 _CIT_PARAGRAFO = re.compile(r"§+\s*\d+\s*O?|PARAGRAFO\s+\d+\s*O?")
 _CIT_INTERVALO = re.compile(r"(\d+)\s*O?\s+(?:A|ATE)\s+(\d+)")
 _CIT_ARTIGO = re.compile(r"(\d+)(?:\s*O)?(?:\s*-\s*([A-Z])(?![A-Z])|([A-Z])(?![A-Z0-9]))?")
