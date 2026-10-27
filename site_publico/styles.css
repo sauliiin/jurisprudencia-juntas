@@ -26,12 +26,12 @@
 
 :root {
   color-scheme: light;
-  --bg: #f7f7f8;
+  --bg: #f0f1f4;
   --surface: #ffffff;
-  --surface-2: #f2f2f4;
-  --surface-hover: #f4f4f6;
-  --line: #e4e4e7;
-  --line-strong: #d4d4d8;
+  --surface-2: #f2f3f6;
+  --surface-hover: #f6f7f9;
+  --line: #d5d8df;
+  --line-strong: #b9bdc7;
   --ink: #18181b;
   --ink-2: #3f3f46;
   --muted: #52525b;
@@ -41,9 +41,9 @@
   --accent-ink: #ffffff;
   --accent-soft: #e6f4f2;
   --accent-text: #0f766e;
-  --busca-bg: #f3f3f5;
+  --busca-bg: #f6f7f9;
   --field-bg: #ffffff;
-  --field-border: #8f8f99;
+  --field-border: #868a96;
   --field-border-hover: #6b6b74;
   --field-shadow: 0 1px 2px rgba(24, 24, 27, 0.06);
   --mark-bg: #fdf0a6;
@@ -58,9 +58,13 @@
   --info-ink: #1d4ed8;
   --neutral-bg: #f0f0f2;
   --neutral-ink: #52525b;
-  --hero-a: rgba(15, 118, 110, 0.1);
-  --hero-b: rgba(37, 99, 235, 0.06);
-  --shadow-hover: 0 1px 2px rgba(24, 24, 27, 0.04), 0 4px 16px rgba(24, 24, 27, 0.07);
+  --hero-a: rgba(15, 118, 110, 0.18);
+  --hero-b: rgba(37, 99, 235, 0.12);
+  --shadow-card: 0 1px 2px rgba(16, 24, 40, 0.06), 0 1px 3px rgba(16, 24, 40, 0.08);
+  --shadow-hover: 0 2px 4px rgba(16, 24, 40, 0.06), 0 8px 20px rgba(16, 24, 40, 0.1);
+  --hero-dot: rgba(15, 23, 42, 0.13);
+  --titulo-a: #0f766e;
+  --titulo-b: #2563eb;
   --shadow-menu: 0 8px 28px rgba(24, 24, 27, 0.12), 0 1px 3px rgba(24, 24, 27, 0.06);
   --focus: 0 0 0 2px var(--surface), 0 0 0 4px #0f766e;
 
@@ -87,12 +91,12 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --bg: #1c1c21;
-    --surface: #24242a;
-    --surface-2: #2c2c33;
-    --surface-hover: #2f2f36;
-    --line: #393941;
-    --line-strong: #4a4a53;
+    --bg: #1a1a1f;
+    --surface: #26262d;
+    --surface-2: #2e2e36;
+    --surface-hover: #313139;
+    --line: #42424c;
+    --line-strong: #575762;
     --ink: #ededef;
     --ink-2: #d4d4d8;
     --muted: #b0b0b9;
@@ -102,7 +106,7 @@
     --accent-ink: #042f2e;
     --accent-soft: rgba(45, 212, 191, 0.12);
     --accent-text: #5eead4;
-    --busca-bg: #24242a;
+    --busca-bg: #222228;
     --field-bg: #31313a;
     --field-border: #74747f;
     --field-border-hover: #9a9aa5;
@@ -119,9 +123,13 @@
     --info-ink: #93c5fd;
     --neutral-bg: rgba(161, 161, 170, 0.14);
     --neutral-ink: #c4c4cc;
-    --hero-a: rgba(45, 212, 191, 0.1);
-    --hero-b: rgba(99, 102, 241, 0.08);
-    --shadow-hover: 0 1px 2px rgba(0, 0, 0, 0.3), 0 6px 20px rgba(0, 0, 0, 0.35);
+    --hero-a: rgba(45, 212, 191, 0.17);
+    --hero-b: rgba(129, 140, 248, 0.14);
+    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    --shadow-hover: 0 2px 6px rgba(0, 0, 0, 0.4), 0 10px 24px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    --hero-dot: rgba(255, 255, 255, 0.08);
+    --titulo-a: #5eead4;
+    --titulo-b: #a5b4fc;
     --shadow-menu: 0 12px 32px rgba(0, 0, 0, 0.5), 0 1px 3px rgba(0, 0, 0, 0.4);
     --focus: 0 0 0 2px var(--surface), 0 0 0 4px #2dd4bf;
   }
@@ -129,12 +137,12 @@
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --bg: #1c1c21;
-  --surface: #24242a;
-  --surface-2: #2c2c33;
-  --surface-hover: #2f2f36;
-  --line: #393941;
-  --line-strong: #4a4a53;
+  --bg: #1a1a1f;
+  --surface: #26262d;
+  --surface-2: #2e2e36;
+  --surface-hover: #313139;
+  --line: #42424c;
+  --line-strong: #575762;
   --ink: #ededef;
   --ink-2: #d4d4d8;
   --muted: #b0b0b9;
@@ -144,7 +152,7 @@
   --accent-ink: #042f2e;
   --accent-soft: rgba(45, 212, 191, 0.12);
   --accent-text: #5eead4;
-  --busca-bg: #24242a;
+  --busca-bg: #222228;
   --field-bg: #31313a;
   --field-border: #74747f;
   --field-border-hover: #9a9aa5;
@@ -161,9 +169,13 @@
   --info-ink: #93c5fd;
   --neutral-bg: rgba(161, 161, 170, 0.14);
   --neutral-ink: #c4c4cc;
-  --hero-a: rgba(45, 212, 191, 0.1);
-  --hero-b: rgba(99, 102, 241, 0.08);
-  --shadow-hover: 0 1px 2px rgba(0, 0, 0, 0.3), 0 6px 20px rgba(0, 0, 0, 0.35);
+  --hero-a: rgba(45, 212, 191, 0.17);
+  --hero-b: rgba(129, 140, 248, 0.14);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  --shadow-hover: 0 2px 6px rgba(0, 0, 0, 0.4), 0 10px 24px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --hero-dot: rgba(255, 255, 255, 0.08);
+  --titulo-a: #5eead4;
+  --titulo-b: #a5b4fc;
   --shadow-menu: 0 12px 32px rgba(0, 0, 0, 0.5), 0 1px 3px rgba(0, 0, 0, 0.4);
   --focus: 0 0 0 2px var(--surface), 0 0 0 4px #2dd4bf;
 }
@@ -387,8 +399,7 @@ mark {
   height: var(--topbar-h);
   padding: 0 var(--s-6);
   border-bottom: 1px solid var(--line);
-  background: color-mix(in srgb, var(--surface) 88%, transparent);
-  backdrop-filter: saturate(1.4) blur(10px);
+  background: var(--surface);
 }
 
 .brand {
@@ -778,6 +789,7 @@ mark {
 
 .hero {
   position: relative;
+  overflow: hidden;
   padding: var(--s-16) var(--s-6) var(--s-12);
   border-bottom: 1px solid var(--line);
   background:
@@ -786,10 +798,32 @@ mark {
     var(--surface);
 }
 
+/* Grade de pontos discreta, que some nas bordas. */
+.hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(var(--hero-dot) 1px, transparent 1px);
+  background-size: 22px 22px;
+  mask-image: radial-gradient(ellipse 75% 70% at 35% 25%, #000 25%, transparent 75%);
+  pointer-events: none;
+}
+
+.hero-inner {
+  position: relative;
+}
+
 .hero-inner,
 .home-secao {
   max-width: 1080px;
   margin: 0 auto;
+}
+
+.titulo-destaque {
+  background: linear-gradient(90deg, var(--titulo-a), var(--titulo-b));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 
 .eyebrow {
@@ -2406,4 +2440,48 @@ body[data-ia="legislacao"] .text-preview {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* ---------- Profundidade: cartões com sombra leve em repouso ---------- */
+
+.result,
+.numero,
+.metrica,
+.recurso,
+.auto-row,
+.meta-grid,
+.similares-lista,
+.preview,
+.topico,
+.video,
+.fluxo-etapa,
+.tecnologia,
+.ia-numero,
+.exemplo,
+.skeleton,
+.eyebrow,
+.btn,
+.modos {
+  box-shadow: var(--shadow-card);
+}
+
+.btn-ghost {
+  box-shadow: none;
+}
+
+.btn-primary,
+.open-button {
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.recurso:hover,
+.metrica:hover,
+.numero:hover {
+  border-color: var(--line-strong);
+  box-shadow: var(--shadow-hover);
+}
+
+/* O anel de foco do teclado vale mais que a sombra dos cartões. */
+:is(.result, .exemplo, .btn, .topico, .similar, .modo, .nav-link):focus-visible {
+  box-shadow: var(--focus);
 }
