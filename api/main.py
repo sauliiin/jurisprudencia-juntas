@@ -11,6 +11,7 @@ import uuid
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -41,6 +42,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.dependency_overrides[get_settings] = lambda: settings
     erros.registrar(app)
+
+    # JSON da busca, JSONL do modo estático e o site: texto que comprime bem.
+    app.add_middleware(GZipMiddleware, minimum_size=1024)
 
     if settings.cors_origins:
         app.add_middleware(

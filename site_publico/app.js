@@ -534,7 +534,10 @@ function autoHref(chave) {
 }
 
 async function init() {
-  await loadAutosManifest();
+  // O manifesto dos autos só serve aos links do detalhe: baixa em paralelo, sem segurar a busca.
+  loadAutosManifest().then(() => {
+    if (state.selected) els.autos.innerHTML = renderAutos(state.selected.autos || []);
+  });
   if (await apiAvailable()) {
     state.mode = "api";
     // A busca por significado ordena o acervo no navegador; no modo API ele não está em memória.
