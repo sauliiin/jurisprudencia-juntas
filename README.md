@@ -249,9 +249,9 @@ literalmente.
 `site_data/votos.jsonl` deve ser versionado no Git: ele é o índice estático do
 site. Já `votos_brutos/` e `indice_busca.db` ficam fora do Git.
 
-Há também um servidor opcional em `site_server.py`, que usa `indice_busca.db`
-para busca via SQLite FTS. Ele é útil para desenvolvimento local, mas o site do
-GitHub Pages não depende dele.
+Há também uma API em FastAPI (`api/`), que serve o site e faz a busca via SQLite
+FTS5 num índice público gerado do JSONL mascarado (`python -m api.indice`). Rode
+com `python -m api`; o site do GitHub Pages não depende dela.
 
 ## IA Do Site (`treinar_ia.py`)
 

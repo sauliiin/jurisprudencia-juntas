@@ -14,7 +14,7 @@ arquivo ja existente e nao-vazio nao e rebaixado. No fim escreve
 site_publico/Autos/manifest.json com a lista dos autos disponiveis — e esse
 manifesto que o site usa para decidir se aponta o link para o PDF local ou para
 o SIF. A pasta fica dentro de site_publico/ para o link relativo "Autos/x.pdf"
-valer tanto no GitHub Pages quanto no site_server.py local.
+valer tanto no GitHub Pages quanto na API local (python -m api).
 """
 
 from __future__ import annotations
