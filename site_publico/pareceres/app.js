@@ -82,6 +82,21 @@ function tokenize(query) {
   return normalize(query).match(/[\p{L}\p{N}]+/gu) || [];
 }
 
+// Ofícios das Juntas levam no nome o interessado ("OFÍCIO 1033 - JIRFI - Fulano.doc").
+// Na tela ficam o número, a junta e o assunto (última pasta, quando não é só o ano);
+// nome_arquivo continua nos dados e na pontuação da busca.
+const OFICIO_COM_NOME = /^of[ií]cio\s+(\d+)\s*-\s*(ji\S*(?:\s+[ivx]+)?)\s*-\s*\S/i;
+
+function tituloPublico(record) {
+  const nome = record.nome_arquivo || "";
+  const oficio = nome.match(OFICIO_COM_NOME);
+  if (!oficio) return nome;
+  const assunto = (record.pasta || "").split(" / ").pop().trim();
+  return [`Ofício ${oficio[1]}`, oficio[2].toUpperCase(), /^\d{4}$/.test(assunto) ? "" : assunto]
+    .filter(Boolean)
+    .join(" · ");
+}
+
 function decorate(record) {
   record.tem_arquivo_publico = Boolean(record.drive_preview_url);
   return record;
@@ -130,7 +145,7 @@ function scoreText(record, terms, phrase) {
 }
 
 function makeSnippet(record, terms, phrase) {
-  const source = record.texto || record.pasta || record.nome_arquivo || "";
+  const source = record.texto || record.pasta || tituloPublico(record);
   if (!terms.length) return escapeHtml(source.slice(0, 360));
   const normalized = normalize(source);
   let index = state.modoEfetivo === "phrase" ? normalized.indexOf(phrase) : -1;
@@ -420,10 +435,10 @@ function renderResults() {
         item.revogado ? "redação revogada" : "",
         item.ia_similaridade ? `similaridade ${Math.round(item.ia_similaridade * 100)}%` : "",
       ].filter(Boolean);
-      const origem = item.arquivo || `${item.categoria || "Raiz"} · ${(item.ext || "").toUpperCase()}`;
+      const origem = (item.arquivo && tituloPublico(item.doc)) || `${item.categoria || "Raiz"} · ${(item.ext || "").toUpperCase()}`;
       return `
         <button class="result${active}" type="button" data-file-id="${escapeHtml(item.file_id)}">
-          <span class="result-title">${escapeHtml(item.nome_arquivo)}</span>
+          <span class="result-title">${escapeHtml(tituloPublico(item))}</span>
           <span class="result-meta">${escapeHtml([origem, ...extras].join(" · "))}</span>
           <span class="result-snippet">${item.trecho || ""}</span>
           <span class="result-autos">${pasta || semPasta}</span>
@@ -455,7 +470,7 @@ function renderDetail() {
   }, 220);
   els.detail.hidden = false;
   els.detailPane.scrollTop = 0;
-  els.detailTitle.textContent = item.nome_arquivo;
+  els.detailTitle.textContent = tituloPublico(item);
   els.detailSubtitle.textContent = item.pasta && item.pasta !== "Raiz" ? item.pasta : "";
   els.detailCategory.textContent = [
     item.categoria || "Raiz",
@@ -511,7 +526,7 @@ async function renderSimilares(item) {
       .map(
         (vizinho) => `
       <button class="similar" type="button" data-file-id="${escapeHtml(vizinho.file_id)}">
-        <span class="similar-title">${escapeHtml(vizinho.nome_arquivo)}</span>
+        <span class="similar-title">${escapeHtml(tituloPublico(vizinho))}</span>
         <span class="similar-meta">${escapeHtml(vizinho.pasta || vizinho.arquivo || "")}</span>
         <span class="similar-infracao">${escapeHtml(vizinho.texto.slice(0, 160))}</span>
       </button>`
