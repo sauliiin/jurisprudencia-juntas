@@ -489,6 +489,25 @@ mark {
   color: var(--ink);
 }
 
+/* Instruções: o atalho mais usado por quem vota, sempre à vista no topo. */
+.nav-destaque {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: var(--s-1);
+  border: 1px solid var(--field-border);
+  color: var(--ink);
+  font-weight: 550;
+}
+
+.nav-destaque .icon {
+  color: var(--accent-text);
+}
+
+.so-celular {
+  display: none;
+}
+
 .topbar-acoes {
   display: flex;
   align-items: center;
@@ -2084,7 +2103,7 @@ body[data-ia="legislacao"] .text-preview {
 /* ---------- Telas médias ---------- */
 
 @media (max-width: 1180px) {
-  .topnav .nav-link {
+  .topnav .nav-link:not(.nav-destaque) {
     display: none;
   }
 
@@ -2156,6 +2175,10 @@ body[data-ia="legislacao"] .text-preview {
   .menu .so-mobile,
   .menu .so-medio {
     display: block;
+  }
+
+  .so-celular {
+    display: inline-flex;
   }
 
   .menu-rotulo {
