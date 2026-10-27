@@ -1,4 +1,6 @@
 const DATA_URL = "../site_data/votos.jsonl";
+// URL da API (config.js). Sem resposta dela em 600 ms, o site usa o modo estático.
+const API_BASE = (window.JURIS_CONFIG?.API_BASE ?? "").replace(/\/$/, "");
 const AUTOS_DIR = "Autos";
 const AUTOS_MANIFEST_URL = `${AUTOS_DIR}/manifest.json`;
 
@@ -265,7 +267,7 @@ function drivePreviewUrl(fileId) {
 }
 
 function localFileUrl(fileId) {
-  return `/api/file/${encodeURIComponent(fileId)}`;
+  return `${API_BASE}/api/file/${encodeURIComponent(fileId)}`;
 }
 
 function decorate(record) {
@@ -274,7 +276,7 @@ function decorate(record) {
   const ext = record.ext || (record.nome_arquivo || "").match(/\.([a-z0-9]+)$/i)?.[1].toLowerCase() || "";
   const publicFileId = record.drive_file_id_publico || record.public_drive_file_id || "";
   record.ext = ext;
-  record.file_url = record.file_url || localFileUrl(fileId);
+  record.file_url = localFileUrl(fileId);
   if (publicFileId) {
     record.drive_view_url = driveViewUrl(publicFileId);
     record.drive_preview_url = drivePreviewUrl(publicFileId);
@@ -473,7 +475,7 @@ async function apiAvailable() {
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 600);
-    const response = await fetch("/api/stats", { signal: controller.signal });
+    const response = await fetch(`${API_BASE}/api/stats`, { signal: controller.signal });
     clearTimeout(timer);
     return response.ok;
   } catch {
@@ -538,7 +540,7 @@ async function init() {
     // A busca por significado ordena o acervo no navegador; no modo API ele não está em memória.
     els.searchMode.querySelector('option[value="semantic"]')?.remove();
     state.searchMode = els.searchMode.value;
-    const stats = await fetchJson("/api/stats");
+    const stats = await fetchJson(`${API_BASE}/api/stats`);
     atualizarNumeros(stats.votos, stats.autos);
   } else {
     state.mode = "static";
@@ -558,7 +560,7 @@ function searchUrl(fetchOffset) {
     limit: String(state.limit),
     offset: String(fetchOffset),
   });
-  return `/api/search?${params.toString()}`;
+  return `${API_BASE}/api/search?${params.toString()}`;
 }
 
 async function runSearch({ append = false, keepOffset = false } = {}) {
@@ -723,7 +725,7 @@ function renderResults() {
 
 async function selectVoto(fileId) {
   if (state.mode === "api") {
-    state.selected = decorate(await fetchJson(`/api/voto/${encodeURIComponent(fileId)}`));
+    state.selected = decorate(await fetchJson(`${API_BASE}/api/voto/${encodeURIComponent(fileId)}`));
   } else {
     state.selected = state.byId.get(fileId);
   }
@@ -803,7 +805,7 @@ async function recordById(fileId) {
   if (local) return local;
   if (state.mode !== "api") return null;
   try {
-    return decorate(await fetchJson(`/api/voto/${encodeURIComponent(fileId)}`));
+    return decorate(await fetchJson(`${API_BASE}/api/voto/${encodeURIComponent(fileId)}`));
   } catch {
     return null;
   }
