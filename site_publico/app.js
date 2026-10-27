@@ -724,7 +724,6 @@ function renderAutos(autos = []) {
           <span class="badge">${badge}</span>
         </div>
         <div class="auto-fields">
-          <div><span>Autuado</span> ${escapeHtml(auto.autuado || "—")}</div>
           <div><span>Infração</span> ${escapeHtml(auto.infracao || "—")}</div>
           <div><span>Dispositivo</span> ${escapeHtml(auto.dispositivo_legal_transgredido || "—")}</div>
           <div><span>Local</span> ${escapeHtml(auto.local_constatacao || "—")}</div>

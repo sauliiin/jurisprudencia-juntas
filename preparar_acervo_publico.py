@@ -141,6 +141,64 @@ def _processed_ids_from_marco(marco: dict) -> set[str]:
     return ids
 
 
+# O JSONL é público: o nome do autuado sai dos autos e é trocado por esta marca no
+# texto. Nomes curtos ficam de fora para não mascarar palavras comuns.
+AUTUADO_MASCARA = "[AUTUADO]"
+AUTUADO_MIN_CHARS = 5
+
+
+def _sem_acento(ch: str) -> str:
+    import unicodedata
+
+    return "".join(
+        c for c in unicodedata.normalize("NFKD", ch) if not unicodedata.combining(c)
+    ).casefold()
+
+
+# O SIF grava os nomes sem acento ("PARTICIPACOES") e o voto às vezes com acento
+# ("PARTICIPAÇÕES"): cada letra casa com as variantes acentuadas dela.
+_VARIANTES_LETRA: dict[str, str] = {}
+for _codigo in range(0x41, 0x250):
+    _ch = chr(_codigo)
+    if _ch.isalpha() and len(_sem_acento(_ch)) == 1:
+        _VARIANTES_LETRA[_sem_acento(_ch)] = _VARIANTES_LETRA.get(_sem_acento(_ch), "") + _ch
+
+
+def _padrao_nome(nome: str) -> str:
+    def letra(ch: str) -> str:
+        variantes = _VARIANTES_LETRA.get(_sem_acento(ch)) if ch.isalpha() else None
+        return f"[{re.escape(variantes)}]" if variantes else re.escape(ch)
+
+    palavras = ("".join(letra(ch) for ch in palavra) for palavra in nome.split())
+    return r"(?<!\w)" + r"\s+".join(palavras) + r"(?!\w)"
+
+
+def _mascara_autuados(nomes: Iterable[str]) -> re.Pattern | None:
+    """Regex que acha os autuados no texto, sem diferenciar caixa, acento e espaços."""
+    variantes: set[str] = set()
+    for nome in nomes:
+        nome = " ".join((nome or "").split())
+        # "FULANO DE TAL 11127445685": o voto costuma citar só o nome, sem o CPF.
+        sem_documento = re.sub(r"[\s\d./-]+$", "", nome)
+        variantes.update(v for v in (nome, sem_documento) if len(v) >= AUTUADO_MIN_CHARS)
+    if not variantes:
+        return None
+    # Mais longo primeiro: "X LTDA - ME" antes de "X LTDA".
+    ordem = sorted(variantes, key=len, reverse=True)
+    return re.compile("|".join(_padrao_nome(v) for v in ordem), re.IGNORECASE)
+
+
+def _payload_publico(payload: dict) -> dict:
+    """Tira o autuado dos autos e mascara o nome dele nos campos de texto."""
+    nomes = [auto.pop("autuado", "") for auto in payload.get("autos", [])]
+    mascara = _mascara_autuados(nomes)
+    if mascara:
+        for campo in ("nome_arquivo", "assunto", "texto"):
+            if payload.get(campo):
+                payload[campo] = mascara.sub(AUTUADO_MASCARA, payload[campo])
+    return payload
+
+
 def _public_links_by_file_id(path: Path) -> dict[str, dict[str, str]]:
     links: dict[str, dict[str, str]] = {}
     if not path.exists():
@@ -947,6 +1005,7 @@ class IndexStore:
                     if include_text:
                         payload["texto"] = row[7] or ""
                     payload.update(public_links.get(row[0], {}))
+                    payload = _payload_publico(payload)
                     fh.write(json.dumps(payload, ensure_ascii=False) + "\n")
                     count += 1
         tmp.replace(path)
