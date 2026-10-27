@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     )
     host: str = "127.0.0.1"
     port: int = 8000
+    workers: int = Field(default=1, ge=1, description="Processos do uvicorn.")
     max_limit: int = Field(default=100, ge=1, description="Máximo de resultados por página.")
     log_level: str = "INFO"
     servir_site: bool = Field(default=True, description="Serve site_publico/ e site_data/ junto com a API.")

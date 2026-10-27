@@ -1,0 +1,51 @@
+# Sobe a API e o site com um comando:  docker compose up --build
+# Depois: http://localhost:8000 (site) e http://localhost:8000/docs (API).
+name: omniai-juris
+
+x-imagem: &imagem
+  build: .
+  image: omniai-jurisprudencia:local
+
+services:
+  # Gera o índice público a partir do acervo mascarado e termina. Roda a cada "up",
+  # então o índice acompanha o site_data/ atual.
+  indice:
+    <<: *imagem
+    command:
+      - python
+      - -m
+      - api.indice
+      - --jsonl=/dados/site_data/votos.jsonl
+      - --saida=/indice/indice_publico.db
+      - --ia=/dados/site_data/ia
+      - --marco=/dados/marco_atualizacao.json
+    volumes:
+      - ./site_data:/dados/site_data:ro
+      - ./marco_atualizacao.json:/dados/marco_atualizacao.json:ro
+      - indice:/indice
+    restart: "no"
+
+  api:
+    <<: *imagem
+    depends_on:
+      indice:
+        condition: service_completed_successfully
+    ports:
+      - "${JURIS_PORTA:-8000}:8000"
+    environment:
+      JURIS_CORS_ORIGINS: ${JURIS_CORS_ORIGINS:-}
+      JURIS_LOG_LEVEL: ${JURIS_LOG_LEVEL:-INFO}
+      JURIS_WORKERS: ${JURIS_WORKERS:-2}
+      # Para servir os originais em /api/file (trazem nomes; só em ambiente privado):
+      # JURIS_ARQUIVOS_DIR: /dados/arquivos
+    volumes:
+      - ./site_data:/dados/site_data:ro
+      - indice:/indice:ro
+      # - ./votos_brutos:/dados/arquivos:ro
+    read_only: true
+    tmpfs:
+      - /tmp
+    restart: unless-stopped
+
+volumes:
+  indice:
