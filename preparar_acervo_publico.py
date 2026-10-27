@@ -25,25 +25,25 @@ import shutil
 import sqlite3
 import threading
 import time
+from collections.abc import Iterable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict, dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Iterable
 
 import pdfplumber
 import requests
 
 from baixar_e_organizar_por_ato import (
+    _DECISAO_RE,
     AUTO_RE,
     AUTO_URL,
     LOGIN_PASS,
     LOGIN_URL,
     LOGIN_USER,
+    TIPO_MIME,
     CacheDB,
     DownloadItem,
-    TIPO_MIME,
-    _DECISAO_RE,
     _do_download,
     _extract_assunto,
     _extract_protocolo,
@@ -150,9 +150,7 @@ AUTUADO_MIN_CHARS = 5
 def _sem_acento(ch: str) -> str:
     import unicodedata
 
-    return "".join(
-        c for c in unicodedata.normalize("NFKD", ch) if not unicodedata.combining(c)
-    ).casefold()
+    return "".join(c for c in unicodedata.normalize("NFKD", ch) if not unicodedata.combining(c)).casefold()
 
 
 # O SIF grava os nomes sem acento ("PARTICIPACOES") e o voto às vezes com acento
@@ -225,11 +223,7 @@ def _public_links_by_file_id(path: Path) -> dict[str, dict[str, str]]:
                 file_id = record.get("file_id")
                 if not file_id:
                     continue
-                payload = {
-                    field: record[field]
-                    for field in PUBLIC_DRIVE_FIELDS
-                    if record.get(field)
-                }
+                payload = {field: record[field] for field in PUBLIC_DRIVE_FIELDS if record.get(field)}
                 if payload:
                     links[str(file_id)] = payload
     except (OSError, json.JSONDecodeError) as exc:
@@ -280,24 +274,26 @@ def _cache_file_count(path: Path) -> int:
 def _parse_iso_datetime(value: str) -> datetime:
     parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
     if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
 
 
 def _drive_modified_query_time(value: datetime) -> str:
-    return value.astimezone(timezone.utc).isoformat(timespec="seconds").replace(
-        "+00:00", "Z"
-    )
+    return value.astimezone(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
 def _drive_metadata(service, file_id: str, memo: dict[str, dict]) -> dict:
     if file_id not in memo:
         memo[file_id] = _retry(
-            lambda: service.files().get(
-                fileId=file_id,
-                fields="id,name,mimeType,size,parents,modifiedTime,shortcutDetails",
-                supportsAllDrives=True,
-            ).execute(),
+            lambda: (
+                service.files()
+                .get(
+                    fileId=file_id,
+                    fields="id,name,mimeType,size,parents,modifiedTime,shortcutDetails",
+                    supportsAllDrives=True,
+                )
+                .execute()
+            ),
             what=f"Drive metadados {file_id}",
         )
     return memo[file_id]
@@ -310,9 +306,7 @@ def _scope_for_parents(
     metadata: dict[str, dict],
 ) -> tuple[dict[str, str], list[str]] | None:
     """Encontra uma pasta-raiz conhecida e o caminho relativo até o arquivo."""
-    queue: list[tuple[str, tuple[str, ...]]] = [
-        (parent_id, ()) for parent_id in parent_ids
-    ]
+    queue: list[tuple[str, tuple[str, ...]]] = [(parent_id, ()) for parent_id in parent_ids]
     visited: set[str] = set()
     while queue:
         folder_id, child_to_parent = queue.pop(0)
@@ -336,16 +330,12 @@ def _scope_for_parents(
             roots[folder_id] = root
             return root, list(reversed(child_to_parent))
 
-        next_path = child_to_parent + (_san(name),)
-        queue.extend(
-            (parent_id, next_path) for parent_id in folder.get("parents", [])
-        )
+        next_path = (*child_to_parent, _san(name))
+        queue.extend((parent_id, next_path) for parent_id in folder.get("parents", []))
     return None
 
 
-def _latest_incremental_start(
-    explicit: str, cache: CacheDB, marco: dict
-) -> datetime:
+def _latest_incremental_start(explicit: str, cache: CacheDB, marco: dict) -> datetime:
     if explicit:
         return _parse_iso_datetime(explicit)
 
@@ -355,9 +345,7 @@ def _latest_incremental_start(
     last_scan = cache.get_meta("last_public_drive_scan_at")
     checkpoint = last_scan or str(marco.get("updated_at") or "")
     if not checkpoint:
-        raise ValueError(
-            "Não há data de retomada. Informe --desde ou faça a indexação completa primeiro."
-        )
+        raise ValueError("Não há data de retomada. Informe --desde ou faça a indexação completa primeiro.")
     # Uma pequena sobreposição protege contra arquivos gravados exatamente na
     # virada entre duas consultas. O file_id continua garantindo deduplicação.
     return _parse_iso_datetime(checkpoint) - timedelta(minutes=5)
@@ -373,23 +361,16 @@ def buscar_atualizacoes_drive(
 ) -> dict[str, int | str]:
     """Atualiza o cache consultando somente itens alterados desde o último marco."""
     service = _new_service(token_path)
-    started_at = datetime.now(timezone.utc)
+    started_at = datetime.now(UTC)
     since = _latest_incremental_start(desde, cache, marco)
     allowed_mimes = set(TIPO_MIME.values())
     shortcut_mime = "application/vnd.google-apps.shortcut"
-    mime_query = " or ".join(
-        f"mimeType='{mime}'" for mime in sorted(allowed_mimes | {shortcut_mime})
-    )
-    query = (
-        "trashed=false and "
-        f"modifiedTime > '{_drive_modified_query_time(since)}' and ({mime_query})"
-    )
+    mime_query = " or ".join(f"mimeType='{mime}'" for mime in sorted(allowed_mimes | {shortcut_mime}))
+    query = f"trashed=false and modifiedTime > '{_drive_modified_query_time(since)}' and ({mime_query})"
 
     roots = {folder["id"]: folder for folder in cache.indexed_folders()}
     if not roots:
-        raise ValueError(
-            "O cache não contém pastas-raiz. Rode baixar_e_organizar_por_ato.py uma vez."
-        )
+        raise ValueError("O cache não contém pastas-raiz. Rode baixar_e_organizar_por_ato.py uma vez.")
     known = {item.file_id: item for item in cache.load_arquivos()}
     planned = {item.destination for item in known.values()}
     metadata: dict[str, dict] = {}
@@ -403,8 +384,7 @@ def buscar_atualizacoes_drive(
     }
 
     print(
-        "Drive incremental desde "
-        f"{_drive_modified_query_time(since)} (somente metadados)...",
+        f"Drive incremental desde {_drive_modified_query_time(since)} (somente metadados)...",
         flush=True,
     )
     for raw in _iter(
@@ -426,16 +406,11 @@ def buscar_atualizacoes_drive(
                 **target,
                 "name": raw.get("name") or target.get("name") or file_id,
                 "parents": raw.get("parents", []),
-                "modifiedTime": max(
-                    raw.get("modifiedTime", ""), target.get("modifiedTime", "")
-                ),
+                "modifiedTime": max(raw.get("modifiedTime", ""), target.get("modifiedTime", "")),
             }
 
         modified_time = source.get("modifiedTime")
-        if (
-            modified_time
-            and cache.get_drive_revision(file_id) == modified_time
-        ):
+        if modified_time and cache.get_drive_revision(file_id) == modified_time:
             handled.add(file_id)
             stats["revisoes_iguais"] += 1
             continue
@@ -452,18 +427,12 @@ def buscar_atualizacoes_drive(
             )
             reason = "modified"
         else:
-            scope = _scope_for_parents(
-                service, raw.get("parents", []), roots, metadata
-            )
+            scope = _scope_for_parents(service, raw.get("parents", []), roots, metadata)
             if not scope:
                 stats["fora_escopo"] += 1
                 continue
             root, relative_dirs = scope
-            root_dir = (
-                output_dir
-                / root["instancia"]
-                / f"{_san(root['name'])} - {root['id'][:8]}"
-            )
+            root_dir = output_dir / root["instancia"] / f"{_san(root['name'])} - {root['id'][:8]}"
             destination = root_dir.joinpath(*relative_dirs, filename)
             destination = _unique(destination, planned)
             planned.add(destination)
@@ -566,9 +535,7 @@ def _extract_from_tables(pdf: pdfplumber.PDF) -> dict[str, str]:
                     if local and not bairro:
                         bairro = _cell_value(cell, "BAIRRO")
                 if local and not fields["local_constatacao"]:
-                    fields["local_constatacao"] = (
-                        f"{local} - {bairro}" if bairro and bairro not in local else local
-                    )
+                    fields["local_constatacao"] = f"{local} - {bairro}" if bairro and bairro not in local else local
     return fields
 
 
@@ -721,10 +688,7 @@ class IndexStore:
             self._ensure_column("auto_cache", "local_constatacao", "TEXT")
 
     def _ensure_column(self, table: str, column: str, column_type: str) -> None:
-        columns = {
-            row[1]
-            for row in self.con.execute(f"PRAGMA table_info({table})").fetchall()
-        }
+        columns = {row[1] for row in self.con.execute(f"PRAGMA table_info({table})").fetchall()}
         if column not in columns:
             self.con.execute(f"ALTER TABLE {table} ADD COLUMN {column} {column_type}")
 
@@ -790,47 +754,23 @@ class IndexStore:
 
     def processed_file_ids(self) -> set[str]:
         with self._lock:
-            ids = {
-                row[0]
-                for row in self.con.execute("SELECT file_id FROM votos").fetchall()
-            }
-            ids.update(
-                row[0]
-                for row in self.con.execute("SELECT file_id FROM skips").fetchall()
-            )
+            ids = {row[0] for row in self.con.execute("SELECT file_id FROM votos").fetchall()}
+            ids.update(row[0] for row in self.con.execute("SELECT file_id FROM skips").fetchall())
         return ids
 
     def processed_file_ids_by_kind(self) -> dict[str, list[str]]:
         with self._lock:
-            votos = [
-                row[0]
-                for row in self.con.execute(
-                    "SELECT file_id FROM votos ORDER BY file_id"
-                ).fetchall()
-            ]
-            skips = [
-                row[0]
-                for row in self.con.execute(
-                    "SELECT file_id FROM skips ORDER BY file_id"
-                ).fetchall()
-            ]
+            votos = [row[0] for row in self.con.execute("SELECT file_id FROM votos ORDER BY file_id").fetchall()]
+            skips = [row[0] for row in self.con.execute("SELECT file_id FROM skips ORDER BY file_id").fetchall()]
         return {"votos": votos, "skips": skips}
 
     def counts(self) -> dict[str, int]:
         with self._lock:
             return {
-                "votos_indexados": int(
-                    self.con.execute("SELECT COUNT(*) FROM votos").fetchone()[0]
-                ),
-                "autos": int(
-                    self.con.execute("SELECT COUNT(*) FROM autos").fetchone()[0]
-                ),
-                "autos_cache": int(
-                    self.con.execute("SELECT COUNT(*) FROM auto_cache").fetchone()[0]
-                ),
-                "pulados": int(
-                    self.con.execute("SELECT COUNT(*) FROM skips").fetchone()[0]
-                ),
+                "votos_indexados": int(self.con.execute("SELECT COUNT(*) FROM votos").fetchone()[0]),
+                "autos": int(self.con.execute("SELECT COUNT(*) FROM autos").fetchone()[0]),
+                "autos_cache": int(self.con.execute("SELECT COUNT(*) FROM auto_cache").fetchone()[0]),
+                "pulados": int(self.con.execute("SELECT COUNT(*) FROM skips").fetchone()[0]),
             }
 
     def save_voto(self, record: VotoRecord) -> None:
@@ -917,9 +857,7 @@ class IndexStore:
         if not path.exists():
             return 0
         with self._lock:
-            existing = {
-                row[0] for row in self.con.execute("SELECT file_id FROM votos")
-            }
+            existing = {row[0] for row in self.con.execute("SELECT file_id FROM votos")}
         imported = 0
         with path.open(encoding="utf-8") as fh:
             for line in fh:
@@ -936,9 +874,7 @@ class IndexStore:
                         tipo=str(auto.get("tipo") or ""),
                         autuado=str(auto.get("autuado") or ""),
                         infracao=str(auto.get("infracao") or ""),
-                        dispositivo_legal_transgredido=str(
-                            auto.get("dispositivo_legal_transgredido") or ""
-                        ),
+                        dispositivo_legal_transgredido=str(auto.get("dispositivo_legal_transgredido") or ""),
                         local_constatacao=str(auto.get("local_constatacao") or ""),
                         lei=str(auto.get("lei") or ""),
                         pdf_encontrado=bool(auto.get("pdf_encontrado")),
@@ -1105,9 +1041,7 @@ class DriveDownloader:
             self._local.service = _new_service(self.token_path)
         return self._local.service
 
-    def ensure_file(
-        self, original: DownloadItem, raw_item: DownloadItem, force: bool = False
-    ) -> str:
+    def ensure_file(self, original: DownloadItem, raw_item: DownloadItem, force: bool = False) -> str:
         if not force and _raw_exists(raw_item.destination, raw_item.file_size):
             return "exists"
         if not force and original.destination.exists():
@@ -1185,10 +1119,7 @@ def process_item(
         return ProcessResult("skip", item.file_id, item.file_name, motivo="sem dispositivo da decisao")
 
     assunto = _extract_assunto(texto)
-    auto_infos = [
-        autos.consultar_auto(idn, tipo, refresh=refresh_autos)
-        for idn, tipo in _autos_unicos(assunto)
-    ]
+    auto_infos = [autos.consultar_auto(idn, tipo, refresh=refresh_autos) for idn, tipo in _autos_unicos(assunto)]
     record = VotoRecord(
         file_id=item.file_id,
         nome_arquivo=item.file_name,
@@ -1204,9 +1135,7 @@ def process_item(
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Cria votos_brutos e índice enriquecido para o site público."
-    )
+    parser = argparse.ArgumentParser(description="Cria votos_brutos e índice enriquecido para o site público.")
     parser.add_argument("--cache", default="pipeline_cache.db")
     parser.add_argument("--credentials", default="credentials.json")
     parser.add_argument("--token", default="token.json")
@@ -1269,17 +1198,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--buscar-novos",
         action="store_true",
-        help=(
-            "Consulta no Drive só arquivos novos/alterados desde o último marco, "
-            "sem refazer o índice completo."
-        ),
+        help=("Consulta no Drive só arquivos novos/alterados desde o último marco, sem refazer o índice completo."),
     )
     parser.add_argument(
         "--desde",
         default="",
         help=(
-            "Data ISO inicial para --buscar-novos. Por padrão usa o último scan "
-            "incremental ou marco_atualizacao.json."
+            "Data ISO inicial para --buscar-novos. Por padrão usa o último scan incremental ou marco_atualizacao.json."
         ),
     )
     parser.add_argument(
@@ -1323,12 +1248,8 @@ def _build_marco(
     previous_votos: set[str] = set()
     previous_skips: set[str] = set()
     if isinstance(previous, dict):
-        previous_votos = {
-            str(item) for item in previous.get("votos", []) if item
-        }
-        previous_skips = {
-            str(item) for item in previous.get("skips", []) if item
-        }
+        previous_votos = {str(item) for item in previous.get("votos", []) if item}
+        previous_skips = {str(item) for item in previous.get("skips", []) if item}
     ids_by_kind = {
         "votos": sorted(current_votos | (previous_votos - current_ids)),
         "skips": sorted(current_skips | (previous_skips - current_ids)),
@@ -1384,7 +1305,9 @@ def _build_marco(
 def main() -> int:
     args = parse_args()
     base = Path.cwd()
-    resolve = lambda value: Path(value) if Path(value).is_absolute() else base / value
+
+    def resolve(value):
+        return Path(value) if Path(value).is_absolute() else base / value
 
     cache_path = resolve(args.cache)
     if not cache_path.exists():
@@ -1428,9 +1351,7 @@ def main() -> int:
     if not args.rebuild:
         imported = store.import_jsonl_missing(jsonl_path)
         if imported:
-            print(
-                f"Índice SQLite restaurado com {imported} registros do JSONL versionado."
-            )
+            print(f"Índice SQLite restaurado com {imported} registros do JSONL versionado.")
 
     pending_updates = cache.pending_public_updates()
     items = _filtrar_items(cache.load_arquivos(), args)
@@ -1447,11 +1368,7 @@ def main() -> int:
             db_ids = store.processed_file_ids()
             processed_ids.update(db_ids)
         before = len(items)
-        items = [
-            item
-            for item in items
-            if item.file_id not in processed_ids or item.file_id in pending_updates
-        ]
+        items = [item for item in items if item.file_id not in processed_ids or item.file_id in pending_updates]
         already_done = before - len(items)
         if already_done:
             sources = []
@@ -1460,16 +1377,11 @@ def main() -> int:
             if db_ids:
                 sources.append(f"SQLite {len(db_ids)}")
             origem = " + ".join(sources) if sources else "retomada"
-            print(
-                f"Retomada: {already_done} arquivos já varridos serão pulados ({origem})."
-            )
+            print(f"Retomada: {already_done} arquivos já varridos serão pulados ({origem}).")
     if not items:
         if store.counts()["votos_indexados"] == 0 and jsonl_path.exists():
             exported = _jsonl_stats(jsonl_path)["registros"]
-            print(
-                "Índice SQLite sem votos; JSONL existente foi mantido para não apagar "
-                "o índice estático."
-            )
+            print("Índice SQLite sem votos; JSONL existente foi mantido para não apagar o índice estático.")
         else:
             exported = store.export_jsonl(jsonl_path, include_text=not args.json_sem_texto)
         marco_payload = _build_marco(
@@ -1564,8 +1476,7 @@ def main() -> int:
                 skipped += 1
                 if not args.quiet_items:
                     print(
-                        f"[{index}/{len(items)}] pula: {result.nome_arquivo} "
-                        f"({result.motivo})",
+                        f"[{index}/{len(items)}] pula: {result.nome_arquivo} ({result.motivo})",
                         flush=True,
                     )
             print_progress()
@@ -1591,7 +1502,7 @@ def main() -> int:
     print(f"Erros                 : {errors}")
     print(f"Registros no JSONL    : {exported}")
     print(f"Marco atualizado      : {marco_path}")
-    print(f"Tempo                 : {elapsed/60:.1f} min")
+    print(f"Tempo                 : {elapsed / 60:.1f} min")
     print_progress(force=True)
     return 0 if errors == 0 else 1
 

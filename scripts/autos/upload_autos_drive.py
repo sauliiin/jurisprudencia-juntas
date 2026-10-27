@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
 import threading
 import time
 from collections import defaultdict
@@ -54,6 +53,7 @@ ESPERA_BASE = 2.0
 # Auth
 # ---------------------------------------------------------------------------
 
+
 def carregar_creds() -> Credentials:
     creds = None
     if TOKEN.exists():
@@ -66,8 +66,7 @@ def carregar_creds() -> Credentials:
         print("\n>>> Abrindo o navegador para o consentimento do Google.")
         print(">>> Se nao abrir sozinho, use a URL impressa abaixo.\n", flush=True)
         flow = InstalledAppFlow.from_client_secrets_file(str(CREDS), SCOPES)
-        creds = flow.run_local_server(port=0, open_browser=True,
-                                      authorization_prompt_message="Abra esta URL: {url}")
+        creds = flow.run_local_server(port=0, open_browser=True, authorization_prompt_message="Abra esta URL: {url}")
     TOKEN.write_text(creds.to_json(), encoding="utf-8")
     TOKEN.chmod(0o600)
     return creds
@@ -92,6 +91,7 @@ class Servicos:
 # Drive
 # ---------------------------------------------------------------------------
 
+
 def listar_pasta(service, folder_id: str) -> dict[str, list[str]]:
     """{nome_sem_extensao_maiusculo: [file_id, ...]} — recursivo."""
     achados: dict[str, list[str]] = defaultdict(list)
@@ -99,12 +99,18 @@ def listar_pasta(service, folder_id: str) -> dict[str, list[str]]:
     while pilha:
         atual, token = pilha.pop(), None
         while True:
-            r = service.files().list(
-                q=f"'{atual}' in parents and trashed=false",
-                fields="nextPageToken,files(id,name,mimeType)",
-                pageSize=1000, pageToken=token,
-                supportsAllDrives=True, includeItemsFromAllDrives=True,
-            ).execute()
+            r = (
+                service.files()
+                .list(
+                    q=f"'{atual}' in parents and trashed=false",
+                    fields="nextPageToken,files(id,name,mimeType)",
+                    pageSize=1000,
+                    pageToken=token,
+                    supportsAllDrives=True,
+                    includeItemsFromAllDrives=True,
+                )
+                .execute()
+            )
             for it in r.get("files", []):
                 if it.get("mimeType") == FOLDER_MIME:
                     pilha.append(it["id"])
@@ -135,21 +141,32 @@ class Contagem:
             decorrido = time.monotonic() - self.inicio
             taxa = feitos / decorrido if decorrido else 0
             restam = (self.total - feitos) / taxa / 60 if taxa else 0
-            print(f"  {feitos:>6}/{self.total} ({feitos/self.total*100:5.1f}%)  "
-                  f"ok={self.ok} erros={self.erros}  {taxa:.1f}/s  "
-                  f"~{restam:.0f} min restantes", flush=True)
+            print(
+                f"  {feitos:>6}/{self.total} ({feitos / self.total * 100:5.1f}%)  "
+                f"ok={self.ok} erros={self.erros}  {taxa:.1f}/s  "
+                f"~{restam:.0f} min restantes",
+                flush=True,
+            )
 
 
-def subir_um(caminho: Path, servicos: Servicos, folder_id: str,
-             cont: Contagem, mapa: dict[str, str], erros: list[str]) -> None:
+def subir_um(
+    caminho: Path, servicos: Servicos, folder_id: str, cont: Contagem, mapa: dict[str, str], erros: list[str]
+) -> None:
     chave = caminho.stem.upper()
     for tentativa in range(1, TENTATIVAS + 1):
         try:
             media = MediaFileUpload(str(caminho), mimetype="application/pdf", resumable=False)
-            arquivo = servicos.get().files().create(
-                body={"name": caminho.name, "parents": [folder_id]},
-                media_body=media, fields="id", supportsAllDrives=True,
-            ).execute()
+            arquivo = (
+                servicos.get()
+                .files()
+                .create(
+                    body={"name": caminho.name, "parents": [folder_id]},
+                    media_body=media,
+                    fields="id",
+                    supportsAllDrives=True,
+                )
+                .execute()
+            )
             with cont.lock:
                 mapa[chave] = arquivo["id"]
             cont.marcar(True)
@@ -180,6 +197,7 @@ def subir_um(caminho: Path, servicos: Servicos, folder_id: str,
 # ---------------------------------------------------------------------------
 # Manifesto
 # ---------------------------------------------------------------------------
+
 
 def autos_do_indice() -> set[str]:
     chaves: set[str] = set()
@@ -213,22 +231,27 @@ def gravar_manifesto(mapa: dict[str, str], folder_id: str, forcar: bool) -> bool
         return False
 
     if faltando:
-        (PASTA_LOCAL / "_faltando_no_drive.txt").write_text(
-            "\n".join(sorted(faltando)), encoding="utf-8")
+        (PASTA_LOCAL / "_faltando_no_drive.txt").write_text("\n".join(sorted(faltando)), encoding="utf-8")
 
-    MANIFEST.write_text(json.dumps({
-        "gerado_em": time.strftime("%Y-%m-%d %H:%M:%S"),
-        "modo": "drive",
-        "folder_id": folder_id,
-        "total": len(mapa),
-        "autos": mapa,
-    }, ensure_ascii=False), encoding="utf-8")
-    print(f"{MANIFEST} regravado: {len(mapa)} autos, modo drive "
-          f"({MANIFEST.stat().st_size/1024:.0f} KB)")
+    MANIFEST.write_text(
+        json.dumps(
+            {
+                "gerado_em": time.strftime("%Y-%m-%d %H:%M:%S"),
+                "modo": "drive",
+                "folder_id": folder_id,
+                "total": len(mapa),
+                "autos": mapa,
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    print(f"{MANIFEST} regravado: {len(mapa)} autos, modo drive ({MANIFEST.stat().st_size / 1024:.0f} KB)")
     return True
 
 
 # ---------------------------------------------------------------------------
+
 
 def main() -> int:
     p = argparse.ArgumentParser(description="Sobe os autos para o Drive.")
@@ -236,8 +259,7 @@ def main() -> int:
     p.add_argument("--workers", type=int, default=24, help="Uploads em paralelo (padrao: 24)")
     p.add_argument("--limite", type=int, default=0, help="So os N primeiros (teste)")
     p.add_argument("--so-login", action="store_true", help="So faz o consentimento e sai")
-    p.add_argument("--so-manifesto", action="store_true",
-                   help="Nao sobe nada; varre a pasta e regrava o manifesto")
+    p.add_argument("--so-manifesto", action="store_true", help="Nao sobe nada; varre a pasta e regrava o manifesto")
     p.add_argument("--forcar", action="store_true", help="Regrava o manifesto com cobertura <90%%")
     args = p.parse_args()
 
@@ -259,8 +281,10 @@ def main() -> int:
     pendentes = [f for f in locais if f.stem.upper() not in mapa]
     if args.limite:
         pendentes = pendentes[: args.limite]
-    print(f"Locais: {len(locais)} | a subir: {len(pendentes)} | "
-          f"{sum(f.stat().st_size for f in pendentes)/1e6:.0f} MB", flush=True)
+    print(
+        f"Locais: {len(locais)} | a subir: {len(pendentes)} | {sum(f.stat().st_size for f in pendentes) / 1e6:.0f} MB",
+        flush=True,
+    )
 
     if not pendentes:
         print("Nada a subir.")
@@ -276,7 +300,7 @@ def main() -> int:
     print(f"\nUpload concluido em {minutos:.1f} min — ok={cont.ok} erros={cont.erros}")
     if erros:
         (PASTA_LOCAL / "_erros_upload.txt").write_text("\n".join(sorted(erros)), encoding="utf-8")
-        print(f"Erros em {PASTA_LOCAL/'_erros_upload.txt'} — rode de novo para tentar so eles")
+        print(f"Erros em {PASTA_LOCAL / '_erros_upload.txt'} — rode de novo para tentar so eles")
         for linha in erros[:3]:
             print("  ", linha)
 

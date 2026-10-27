@@ -48,6 +48,7 @@ ESPERA_BASE = 2.0  # segundos, dobra a cada tentativa
 # Coleta dos autos unicos
 # ---------------------------------------------------------------------------
 
+
 def coletar_autos(caminho: Path) -> list[tuple[str, str, str]]:
     """Retorna [(chave, idn, tipo)] sem repeticao, na ordem em que aparecem."""
     vistos: dict[str, tuple[str, str, str]] = {}
@@ -78,6 +79,7 @@ def coletar_autos(caminho: Path) -> list[tuple[str, str, str]]:
 # ---------------------------------------------------------------------------
 # Cliente SIF
 # ---------------------------------------------------------------------------
+
 
 class Throttle:
     """Limite global de requisicoes por segundo, somando todos os workers."""
@@ -123,9 +125,7 @@ class SifClient:
         for tentativa in range(1, TENTATIVAS + 1):
             try:
                 self._throttle.espera()
-                resp = self._sessao().get(
-                    AUTO_URL, params={"Idn_Doct_Lavr": idn, "Tip_Auto": tipo}, timeout=60
-                )
+                resp = self._sessao().get(AUTO_URL, params={"Idn_Doct_Lavr": idn, "Tip_Auto": tipo}, timeout=60)
                 resp.raise_for_status()
                 inicio = resp.content.find(b"%PDF")
                 if inicio == -1:
@@ -144,6 +144,7 @@ class SifClient:
 # Execucao
 # ---------------------------------------------------------------------------
 
+
 class Contagem:
     def __init__(self):
         self.lock = threading.Lock()
@@ -156,8 +157,15 @@ class Contagem:
         return self.ok + self.pulados + self.ausentes + self.erros
 
 
-def baixar_um(alvo: tuple[str, str, str], sif: SifClient, destino: Path,
-              cont: Contagem, total: int, ausentes: list[str], erros: list[str]) -> None:
+def baixar_um(
+    alvo: tuple[str, str, str],
+    sif: SifClient,
+    destino: Path,
+    cont: Contagem,
+    total: int,
+    ausentes: list[str],
+    erros: list[str],
+) -> None:
     chave, idn, tipo = alvo
     arquivo = destino / f"{chave}.pdf"
     if arquivo.exists() and arquivo.stat().st_size > 0:
@@ -222,13 +230,13 @@ def escrever_manifesto(destino: Path) -> int:
 
 def main() -> int:
     p = argparse.ArgumentParser(description="Baixa os PDFs dos autos do SIF para Autos/.")
-    p.add_argument("--saida", default=str(RAIZ / "site_publico" / "Autos"),
-                   help="Pasta de destino (padrao: site_publico/Autos/)")
+    p.add_argument(
+        "--saida", default=str(RAIZ / "site_publico" / "Autos"), help="Pasta de destino (padrao: site_publico/Autos/)"
+    )
     p.add_argument("--workers", type=int, default=8, help="Downloads em paralelo (padrao: 8)")
     p.add_argument("--taxa", type=float, default=8.0, help="Requisicoes/s no total (padrao: 8)")
     p.add_argument("--limite", type=int, default=0, help="So os N primeiros autos (teste)")
-    p.add_argument("--so-manifesto", action="store_true",
-                   help="Nao baixa nada; so regrava Autos/manifest.json")
+    p.add_argument("--so-manifesto", action="store_true", help="Nao baixa nada; so regrava Autos/manifest.json")
     args = p.parse_args()
 
     destino = Path(args.saida)

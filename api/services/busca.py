@@ -128,9 +128,7 @@ def buscar(con: sqlite3.Connection, p: ParametrosBusca) -> dict:
                 [match, *filtro, p.limit, p.offset],
             ).fetchall()
         else:
-            total = con.execute(
-                "SELECT count(*) FROM votos v WHERE 1=1" + where_instancia, filtro
-            ).fetchone()[0]
+            total = con.execute("SELECT count(*) FROM votos v WHERE 1=1" + where_instancia, filtro).fetchone()[0]
             # Sem consulta: as mais recentes (o índice público não tem a data de indexação
             # do pipeline; a data da decisão faz o mesmo papel).
             rows = con.execute(
@@ -158,9 +156,7 @@ def buscar(con: sqlite3.Connection, p: ParametrosBusca) -> dict:
 
 
 def voto(con: sqlite3.Connection, file_id: str) -> dict | None:
-    row = con.execute(
-        f"SELECT {_CAMPOS.replace('v.', '')}, texto FROM votos WHERE file_id = ?", (file_id,)
-    ).fetchone()
+    row = con.execute(f"SELECT {_CAMPOS.replace('v.', '')}, texto FROM votos WHERE file_id = ?", (file_id,)).fetchone()
     if not row:
         return None
     payload = _com_urls(dict(row))
