@@ -2167,6 +2167,19 @@ body[data-ia="legislacao"] .text-preview {
     height: 44px;
   }
 
+  .nav-destaque {
+    padding: 6px 8px;
+  }
+
+  .nav-destaque .nav-rotulo {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+  }
+
   .filtros {
     display: none;
     flex-wrap: wrap;
