@@ -169,8 +169,17 @@ def _padrao_nome(nome: str) -> str:
         variantes = _VARIANTES_LETRA.get(_sem_acento(ch)) if ch.isalpha() else None
         return f"[{re.escape(variantes)}]" if variantes else re.escape(ch)
 
-    palavras = ("".join(letra(ch) for ch in palavra) for palavra in nome.split())
-    return r"(?<!\w)" + r"\s+".join(palavras) + r"(?!\w)"
+    # Entre as palavras, qualquer pontuação: "S/A" casa com "S.A." e "LTDA. - EPP" com
+    # "LTDA - EPP". Onde o nome tem espaço, exige ao menos um separador; onde tem só
+    # pontuação ("INFRA-ESTRUTURA"), aceita também as palavras coladas.
+    partes = re.split(r"([\W_]+)", nome.strip())
+    padrao = ""
+    for i, parte in enumerate(partes):
+        if i % 2 == 0:
+            padrao += "".join(letra(ch) for ch in parte)
+        elif partes[i - 1] and partes[i + 1]:
+            padrao += r"[\W_]+" if re.search(r"\s", parte) else r"[\W_]*"
+    return r"(?<!\w)" + padrao + r"(?!\w)"
 
 
 def _mascara_autuados(nomes: Iterable[str]) -> re.Pattern | None:
@@ -193,9 +202,13 @@ def _payload_publico(payload: dict) -> dict:
     nomes = [auto.pop("autuado", "") for auto in payload.get("autos", [])]
     mascara = _mascara_autuados(nomes)
     if mascara:
-        for campo in ("nome_arquivo", "assunto", "texto"):
-            if payload.get(campo):
-                payload[campo] = mascara.sub(AUTUADO_MASCARA, payload[campo])
+        # O SIF às vezes põe o nome do estabelecimento no local da constatação.
+        alvos = [(payload, ("nome_arquivo", "assunto", "texto"))]
+        alvos += [(auto, ("infracao", "local_constatacao")) for auto in payload.get("autos", [])]
+        for registro, campos in alvos:
+            for campo in campos:
+                if registro.get(campo):
+                    registro[campo] = mascara.sub(AUTUADO_MASCARA, registro[campo])
     return payload
 
 
@@ -1269,6 +1282,11 @@ def parse_args() -> argparse.Namespace:
             "incremental ou marco_atualizacao.json."
         ),
     )
+    parser.add_argument(
+        "--so-exportar",
+        action="store_true",
+        help="Só regrava o JSONL a partir do índice SQLite, sem Drive nem SIF.",
+    )
     return parser.parse_args()
 
 
@@ -1374,9 +1392,16 @@ def main() -> int:
         print("Rode primeiro baixar_e_organizar_por_ato.py para preencher o índice do Drive.")
         return 2
 
+    indice_path = resolve(args.indice)
+    if args.so_exportar:
+        store = IndexStore(indice_path)
+        exported = store.export_jsonl(resolve(args.jsonl), include_text=not args.json_sem_texto)
+        store.close()
+        print(f"JSONL regravado com {exported} registros a partir de {indice_path}.")
+        return 0
+
     _load_creds(resolve(args.credentials), resolve(args.token))
 
-    indice_path = resolve(args.indice)
     if args.rebuild:
         for suffix in ("", "-wal", "-shm"):
             indice_path.with_name(indice_path.name + suffix).unlink(missing_ok=True)
