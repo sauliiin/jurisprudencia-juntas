@@ -1,180 +1,213 @@
 <!doctype html>
 <html lang="pt-BR">
+
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Como funciona a IA do site</title>
+  <title>Como funciona a IA · OmniAI · Jurisprudência</title>
+  <meta name="description" content="Um modelo de IA treinado do zero com o acervo, que roda no navegador: busca por significado, casos semelhantes e métricas de avaliação." />
+  <meta name="theme-color" content="#0f766e" />
+  <link rel="canonical" href="https://sauliiin.github.io/jurisprudencia-juntas/site_publico/ia.html" />
+  <meta property="og:type" content="website" />
+  <meta property="og:locale" content="pt_BR" />
+  <meta property="og:site_name" content="OmniAI · Jurisprudência" />
+  <meta property="og:title" content="Como funciona a IA · OmniAI · Jurisprudência" />
+  <meta property="og:description" content="Um modelo de IA treinado do zero com o acervo, que roda no navegador: busca por significado, casos semelhantes e métricas de avaliação." />
+  <meta property="og:url" content="https://sauliiin.github.io/jurisprudencia-juntas/site_publico/ia.html" />
+  <meta property="og:image" content="https://sauliiin.github.io/jurisprudencia-juntas/site_publico/assets/og.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Como funciona a IA · OmniAI · Jurisprudência" />
+  <meta name="twitter:description" content="Um modelo de IA treinado do zero com o acervo, que roda no navegador: busca por significado, casos semelhantes e métricas de avaliação." />
+  <meta name="twitter:image" content="https://sauliiin.github.io/jurisprudencia-juntas/site_publico/assets/og.png" />
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
+  <link rel="preload" href="assets/fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="styles.css" />
-  <style>
-    body {
-      padding: 40px 16px;
-      overflow: auto;
-      background: var(--bg);
-      color: var(--ink);
-    }
-    .ia-page {
-      margin: 0 auto;
-      max-width: 760px;
-      background: rgba(10, 16, 25, 0.8);
-      border: 1px solid var(--accent);
-      padding: 32px;
-      line-height: 1.6;
-      box-shadow: 0 0 20px rgba(0, 240, 255, 0.2);
-    }
-    .ia-page h1 {
-      margin-top: 0;
-      color: var(--accent-neon);
-      text-transform: uppercase;
-      letter-spacing: 2px;
-      font-size: 22px;
-    }
-    .ia-page h2 {
-      margin: 28px 0 8px;
-      color: var(--accent);
-      font-size: 16px;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-    }
-    .ia-page p, .ia-page li { color: #d5e6f2; }
-    .ia-page a { color: var(--accent); }
-    .ia-numeros {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 12px;
-      margin: 12px 0;
-    }
-    .ia-numero {
-      padding: 14px;
-      border: 1px solid rgba(0, 240, 255, 0.25);
-      border-left: 3px solid var(--accent);
-      background: rgba(5, 8, 12, 0.6);
-    }
-    .ia-numero strong {
-      display: block;
-      color: #fff;
-      font-size: 26px;
-    }
-    .ia-numero span { color: var(--muted); font-size: 13px; }
-    .ia-aviso {
-      padding: 12px 14px;
-      border: 1px solid var(--accent-strong);
-      background: rgba(255, 0, 85, 0.06);
-    }
-  </style>
+  <script>
+    try {
+      const tema = localStorage.getItem("omniai-tema");
+      if (tema === "light" || tema === "dark") document.documentElement.dataset.theme = tema;
+    } catch {}
+  </script>
 </head>
-<body>
-  <main class="ia-page">
-    <h1>Como funciona a IA do site</h1>
-    <p>
-      O site usa um modelo de inteligência artificial treinado só com as decisões deste acervo, nas
-      decisões e na legislação. Ele roda no seu navegador: nada do que você digita é enviado para fora.
-    </p>
 
-    <h2>Casos semelhantes</h2>
-    <p>
-      Ao abrir uma decisão, o painel mostra as cinco decisões mais parecidas com ela e o resultado
-      de cada uma (deferido, indeferido, não conhecido...). Serve para achar rapidamente como casos
-      do mesmo tipo foram julgados.
-    </p>
+<body class="doc">
+  <a class="pular" href="#conteudo">Pular para o conteúdo</a>
 
-    <h2>Busca por significado</h2>
-    <p>
-      <strong>Significado (IA)</strong> é o modo de busca padrão: descreva o caso com as suas
-      palavras, por exemplo <em>“caixa de passagem do hidrômetro sem tampa no passeio”</em>.
-      A lista vem ordenada pela proximidade de assunto, mesmo que a decisão use outras palavras, e o
-      site indica a infração mais provável. A IA não lê números: uma consulta com número de auto,
-      protocolo ou artigo vai sozinha para a busca por expressão exata. Para achar um nome ou uma
-      expressão exata, escolha os modos <strong>Expressão</strong> ou <strong>Palavras</strong>.
-    </p>
-
-    <h2>O quanto dá para confiar</h2>
-    <p>
-      Antes de cada publicação, o modelo é testado em decisões que ele não viu durante o treino. O
-      gabarito é a infração registrada no SIF para o auto de cada decisão.
-    </p>
-    <div class="ia-numeros" id="ia-numeros">
-      <div class="ia-numero"><strong>—</strong><span>Carregando os números do modelo publicado</span></div>
+  <header class="topbar">
+    <a class="brand" href="./" aria-label="OmniAI · Jurisprudência, página inicial">
+      <span class="brand-mark" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="assets/icones.svg#balanca" /></svg></span>
+      <span>OmniAI<span class="brand-sep"> · </span><span class="brand-produto">Jurisprudência</span></span>
+    </a>
+    <nav class="topnav" aria-label="Principal">
+      <div class="modos">
+        <a class="modo" href="./">Decisões</a>
+        <a class="modo" href="pareceres/">Pareceres</a>
+        <a class="modo" href="legislacao/">Legislação</a>
+      </div>
+      <a class="nav-link" href="ia.html" aria-current="page">Como funciona a IA</a>
+      <a class="nav-link" href="sobre.html">Sobre</a>
+    </nav>
+    <div class="topbar-acoes">
+      <details class="menu">
+        <summary class="icon-btn" aria-label="Mais opções">
+          <svg class="icon" aria-hidden="true"><use href="assets/icones.svg#mais" /></svg><span class="menu-rotulo">Mais</span>
+        </summary>
+        <div class="menu-painel">
+          <div class="so-mobile">
+            <a href="./"><svg class="icon" aria-hidden="true"><use href="assets/icones.svg#balanca" /></svg>Decisões</a>
+            <a href="pareceres/"><svg class="icon" aria-hidden="true"><use href="assets/icones.svg#pasta" /></svg>Pareceres</a>
+            <a href="legislacao/"><svg class="icon" aria-hidden="true"><use href="assets/icones.svg#livro" /></svg>Legislação</a>
+          </div>
+          <div class="so-medio">
+            <a href="ia.html"><svg class="icon" aria-hidden="true"><use href="assets/icones.svg#faisca" /></svg>Como funciona a IA</a>
+            <a href="sobre.html"><svg class="icon" aria-hidden="true"><use href="assets/icones.svg#info" /></svg>Sobre o projeto</a>
+            <div class="menu-sep"></div>
+          </div>
+          <div class="menu-titulo">Para quem vota nas Juntas</div>
+          <a href="https://drive.google.com/drive/folders/1YDlwa0MiwxSYp5H8YgRgQfdKc9hQhJph?usp=sharing" target="_blank" rel="noopener">
+            <svg class="icon" aria-hidden="true"><use href="assets/icones.svg#pasta" /></svg>Drive · Decisões por lei
+            <svg class="icon externo" aria-hidden="true"><use href="assets/icones.svg#externo" /></svg></a>
+          <a href="https://drive.google.com/drive/folders/1k8K3eUxbiuRlLcRZhVXwx4fyr3P94zcZ?usp=sharing" target="_blank" rel="noopener">
+            <svg class="icon" aria-hidden="true"><use href="assets/icones.svg#documento" /></svg>Drive · Modelos de voto
+            <svg class="icon externo" aria-hidden="true"><use href="assets/icones.svg#externo" /></svg></a>
+          <a href="instrucoes.html"><svg class="icon" aria-hidden="true"><use href="assets/icones.svg#info" /></svg>Instruções</a>
+          <a href="roteiro_voto.html"><svg class="icon" aria-hidden="true"><use href="assets/icones.svg#livro" /></svg>Roteiro para elaborar voto</a>
+          <a href="tutoriais.html"><svg class="icon" aria-hidden="true"><use href="assets/icones.svg#video" /></svg>Vídeos tutoriais</a>
+        </div>
+      </details>
+      <button class="icon-btn tema-toggle" type="button" aria-label="Alternar tema">
+        <svg class="icon icon-lua" aria-hidden="true"><use href="assets/icones.svg#lua" /></svg>
+        <svg class="icon icon-sol" aria-hidden="true"><use href="assets/icones.svg#sol" /></svg>
+      </button>
     </div>
-    <p id="ia-rodape" class="muted"></p>
-    <p class="ia-aviso">
-      <strong>É uma ferramenta de pesquisa, não de decisão.</strong> O modelo aponta decisões de
-      assunto parecido; ele não sabe se os fatos do seu caso são os mesmos, não interpreta a
-      legislação e erra. O resultado dos casos semelhantes mostra como eles foram julgados, não como o seu
-      será. Leia sempre a decisão indicada.
-    </p>
+  </header>
 
-    <h2>Na legislação</h2>
-    <p>
-      No modo Legislação, cada artigo (e cada item das tabelas de penalidades) é um resultado. Com
-      <strong>Significado (IA)</strong>, descreva o fato, por exemplo <em>“bar colocou mesas e cadeiras
-      na calçada sem licença”</em>, e a lista traz os artigos vigentes mais próximos, mesmo que usem
-      outras palavras. Ao abrir um artigo, <strong>Artigos semelhantes</strong> mostra os mais
-      parecidos, em geral o artigo do decreto que regulamenta a lei e o item da tabela de penalidades,
-      e quantas decisões do acervo têm auto que cita aquele artigo.
-    </p>
-    <p>
-      O modelo é o mesmo das decisões. Cada artigo entra nele pelo próprio texto somado às decisões
-      cujos autos o citam no “dispositivo legal transgredido”, e por isso fica perto das infrações em
-      que é aplicado. A redação revogada (riscada no original) continua pesquisável por palavras, mas
-      fica fora da busca por significado e dos semelhantes.
-    </p>
-    <p>
-      O teste usa as mesmas decisões fora do treino: a partir do texto delas, o artigo citado no auto
-      aparece entre os cinco primeiros?
-    </p>
-    <div class="ia-numeros" id="ia-numeros-legislacao">
-      <div class="ia-numero"><strong>—</strong><span>Carregando os números da legislação</span></div>
+  <main id="conteudo" class="pagina">
+    <a class="voltar" href="./"><svg class="icon icon-sm" aria-hidden="true"><use href="assets/icones.svg#seta-esquerda" /></svg>Voltar para a busca</a>
+    <header class="pagina-head">
+      <h1>Como funciona a IA do site</h1>
+      <p>Um modelo treinado só com as decisões deste acervo, nas decisões e na legislação. Ele roda no seu
+        navegador: nada do que você digita é enviado para fora.</p>
+    </header>
+    <div class="prose">
+      <h2>Casos semelhantes</h2>
+      <p>
+        Ao abrir uma decisão, o painel mostra as cinco decisões mais parecidas com ela e o resultado
+        de cada uma (deferido, indeferido, não conhecido...). Serve para achar rapidamente como casos
+        do mesmo tipo foram julgados.
+      </p>
+
+      <h2>Busca por significado</h2>
+      <p>
+        <strong>Significado (IA)</strong> é o modo de busca padrão: descreva o caso com as suas
+        palavras, por exemplo <em>“caixa de passagem do hidrômetro sem tampa no passeio”</em>.
+        A lista vem ordenada pela proximidade de assunto, mesmo que a decisão use outras palavras, e o
+        site indica a infração mais provável. A IA não lê números: uma consulta com número de auto,
+        protocolo ou artigo vai sozinha para a busca por expressão exata. Para achar uma expressão exata,
+        escolha os modos <strong>Expressão</strong> ou <strong>Palavras</strong>.
+      </p>
+
+      <h2>O quanto dá para confiar</h2>
+      <p>
+        Antes de cada publicação, o modelo é testado em decisões que ele não viu durante o treino. O
+        gabarito é a infração registrada no SIF para o auto de cada decisão.
+      </p>
+      <div class="ia-numeros" id="ia-numeros">
+        <div class="ia-numero"><strong>—</strong><span>Carregando os números do modelo publicado</span></div>
+      </div>
+      <p id="ia-rodape" class="muted"></p>
+      <div class="aviso">
+        <svg class="icon" aria-hidden="true"><use href="assets/icones.svg#info" /></svg>
+        <p><strong>É uma ferramenta de pesquisa, não de decisão.</strong> O modelo aponta decisões de
+        assunto parecido; ele não sabe se os fatos do seu caso são os mesmos, não interpreta a
+        legislação e erra. O resultado dos casos semelhantes mostra como eles foram julgados, não como o seu
+        será. Leia sempre a decisão indicada.</p>
+      </div>
+
+      <h2>Na legislação</h2>
+      <p>
+        No modo Legislação, cada artigo (e cada item das tabelas de penalidades) é um resultado. Com
+        <strong>Significado (IA)</strong>, descreva o fato, por exemplo <em>“bar colocou mesas e cadeiras
+        na calçada sem licença”</em>, e a lista traz os artigos vigentes mais próximos, mesmo que usem
+        outras palavras. Ao abrir um artigo, <strong>Artigos semelhantes</strong> mostra os mais
+        parecidos, em geral o artigo do decreto que regulamenta a lei e o item da tabela de penalidades,
+        e quantas decisões do acervo têm auto que cita aquele artigo.
+      </p>
+      <p>
+        O modelo é o mesmo das decisões. Cada artigo entra nele pelo próprio texto somado às decisões
+        cujos autos o citam no “dispositivo legal transgredido”, e por isso fica perto das infrações em
+        que é aplicado. A redação revogada (riscada no original) continua pesquisável por palavras, mas
+        fica fora da busca por significado e dos semelhantes.
+      </p>
+      <p>
+        O teste usa as mesmas decisões fora do treino: a partir do texto delas, o artigo citado no auto
+        aparece entre os cinco primeiros?
+      </p>
+      <div class="ia-numeros" id="ia-numeros-legislacao">
+        <div class="ia-numero"><strong>—</strong><span>Carregando os números da legislação</span></div>
+      </div>
+
+      <h2>Como ele aprende</h2>
+      <p>
+        O modelo é uma rede neural pequena. Ela recebe o texto da decisão e aprende a reconhecer a
+        infração do auto; no caminho, aprende a colocar perto umas das outras as decisões que tratam
+        do mesmo assunto. Ele é refeito do zero a cada atualização do acervo, então passa a conhecer
+        as decisões novas assim que elas entram no site. Ele não aprende com o que você pesquisa.
+      </p>
     </div>
-
-    <h2>Como ele aprende</h2>
-    <p>
-      O modelo é uma rede neural pequena. Ela recebe o texto da decisão e aprende a reconhecer a
-      infração do auto; no caminho, aprende a colocar perto umas das outras as decisões que tratam
-      do mesmo assunto. Ele é refeito do zero a cada atualização do acervo, então passa a conhecer
-      as decisões novas assim que elas entram no site. Ele não aprende com o que você pesquisa.
-    </p>
-
-    <p><a href="index.html">← Voltar para a busca</a></p>
   </main>
 
+  <footer class="rodape">
+    <div class="rodape-inner">
+      <span>OmniAI · Jurisprudência — projeto de Saulo Hugo Rossi</span>
+      <nav aria-label="Rodapé">
+        <a href="sobre.html">Sobre</a>
+        <a href="ia.html">Como funciona a IA</a>
+        <a href="instrucoes.html">Instruções</a>
+        <a href="https://drive.google.com/drive/folders/1YDlwa0MiwxSYp5H8YgRgQfdKc9hQhJph?usp=sharing" target="_blank" rel="noopener">Drive · Decisões por lei</a>
+        <a href="https://drive.google.com/drive/folders/1k8K3eUxbiuRlLcRZhVXwx4fyr3P94zcZ?usp=sharing" target="_blank" rel="noopener">Drive · Modelos</a>
+        <a href="https://github.com/sauliiin/jurisprudencia-juntas" target="_blank" rel="noopener">GitHub</a>
+      </nav>
+    </div>
+  </footer>
+
+  <script src="site.js" defer></script>
   <script src="ia.js"></script>
   <script>
     const pct = (valor) => `${Math.round(valor * 100)}%`;
+    const numeros = (itens) =>
+      itens.map(([valor, texto]) => `<div class="ia-numero"><strong>${valor}</strong><span>${texto}</span></div>`).join("");
+    const indisponivel = '<div class="ia-numero"><strong>—</strong><span>Números indisponíveis no momento.</span></div>';
     IA.avaliacao()
       .then((a) => {
         if (!a.decisoes_de_teste) throw new Error("sem avaliação");
-        const itens = [
+        document.querySelector("#ia-numeros").innerHTML = numeros([
           [pct(a.vizinhos_mesma_infracao_p5), `dos casos semelhantes tratam da mesma infração (ao acaso seriam ${pct(a.vizinhos_acaso_p5)})`],
           [pct(a.acerto_infracao), `de acerto ao indicar a infração a partir do texto da decisão, entre ${a.infracoes_distintas} possíveis`],
           [String(a.busca_narrativa_mrr10).replace(".", ","), "na busca a partir do relato do fiscal (1 = a primeira decisão da lista é sempre da mesma infração)"],
-        ];
-        document.querySelector("#ia-numeros").innerHTML = itens
-          .map(([valor, texto]) => `<div class="ia-numero"><strong>${valor}</strong><span>${texto}</span></div>`)
-          .join("");
+        ]);
         document.querySelector("#ia-rodape").textContent =
           `Modelo gerado em ${a.gerado_em}, com ${a.n_docs.toLocaleString("pt-BR")} decisões; testado em ` +
           `${a.decisoes_de_teste.toLocaleString("pt-BR")} que ficaram fora do treino.`;
       })
       .catch(() => {
-        document.querySelector("#ia-numeros").innerHTML =
-          '<div class="ia-numero"><strong>—</strong><span>Números indisponíveis no momento.</span></div>';
+        document.querySelector("#ia-numeros").innerHTML = indisponivel;
       });
     IA.avaliacaoLegislacao()
       .then((a) => {
         if (!a.consultas_relato) throw new Error("sem avaliação");
-        const itens = [
+        document.querySelector("#ia-numeros-legislacao").innerHTML = numeros([
           [pct(a.relato_top5), `das vezes o artigo citado no auto está entre os 5 primeiros, buscando pelo relato do fiscal (só por palavras: ${pct(a.relato_top5_so_palavras)})`],
           [pct(a.infracao_top5), "das vezes, buscando pela descrição da infração no auto"],
           [a.n_docs.toLocaleString("pt-BR"), "artigos e itens vigentes na busca por significado e nos semelhantes"],
-        ];
-        document.querySelector("#ia-numeros-legislacao").innerHTML = itens
-          .map(([valor, texto]) => `<div class="ia-numero"><strong>${valor}</strong><span>${texto}</span></div>`)
-          .join("");
+        ]);
       })
       .catch(() => {
-        document.querySelector("#ia-numeros-legislacao").innerHTML =
-          '<div class="ia-numero"><strong>—</strong><span>Números indisponíveis no momento.</span></div>';
+        document.querySelector("#ia-numeros-legislacao").innerHTML = indisponivel;
       });
   </script>
 </body>
+
 </html>

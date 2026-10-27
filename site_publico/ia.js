@@ -227,6 +227,23 @@ const IA = (() => {
     return { ...modelo.avaliacao, gerado_em: modelo.gerado_em, n_docs: modelo.n_docs };
   }
 
+  /** Resultado de cada decisão lido do texto no treino: Map id -> "deferido", "indeferido"... */
+  let mapaResultados = null;
+  async function resultados() {
+    mapaResultados ??= carregarLeve().then(({ modelo, resultados: codigos }) => {
+      const mapa = new Map();
+      modelo.ids.forEach((id, i) => {
+        const rotulo = modelo.resultados[codigos[i]];
+        if (rotulo) mapa.set(id, rotulo);
+      });
+      return mapa;
+    }).catch((erro) => {
+      mapaResultados = null;
+      throw erro;
+    });
+    return mapaResultados;
+  }
+
   async function avaliacao() {
     const m = await carregarLeve();
     return { ...m.modelo.avaliacao, gerado_em: m.modelo.gerado_em, n_docs: m.modelo.n_docs };
@@ -235,6 +252,7 @@ const IA = (() => {
   return {
     buscar,
     semelhantes,
+    resultados,
     avaliacao,
     tokenizar,
     buscarLegislacao,

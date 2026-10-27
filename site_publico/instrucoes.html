@@ -1,75 +1,134 @@
 <!doctype html>
 <html lang="pt-BR">
+
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Instruções</title>
+  <title>Instruções · OmniAI · Jurisprudência</title>
+  <meta name="description" content="Roteiro para elaborar votos, modelos, vídeos tutoriais e como funciona a IA do site." />
+  <meta name="theme-color" content="#0f766e" />
+  <link rel="canonical" href="https://sauliiin.github.io/jurisprudencia-juntas/site_publico/instrucoes.html" />
+  <meta property="og:type" content="website" />
+  <meta property="og:locale" content="pt_BR" />
+  <meta property="og:site_name" content="OmniAI · Jurisprudência" />
+  <meta property="og:title" content="Instruções · OmniAI · Jurisprudência" />
+  <meta property="og:description" content="Roteiro para elaborar votos, modelos, vídeos tutoriais e como funciona a IA do site." />
+  <meta property="og:url" content="https://sauliiin.github.io/jurisprudencia-juntas/site_publico/instrucoes.html" />
+  <meta property="og:image" content="https://sauliiin.github.io/jurisprudencia-juntas/site_publico/assets/og.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Instruções · OmniAI · Jurisprudência" />
+  <meta name="twitter:description" content="Roteiro para elaborar votos, modelos, vídeos tutoriais e como funciona a IA do site." />
+  <meta name="twitter:image" content="https://sauliiin.github.io/jurisprudencia-juntas/site_publico/assets/og.png" />
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
+  <link rel="preload" href="assets/fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="styles.css" />
-  <style>
-    body {
-      padding: 40px;
-      overflow: auto;
-      background: var(--bg);
-      color: var(--ink);
-    }
-    .instrucoes-container {
-      margin: 0 auto;
-      background: rgba(10, 16, 25, 0.8);
-      border: 1px solid var(--accent);
-      border-radius: 0px;
-      padding: 40px;
-      text-align: center;
-      box-shadow: 0 0 20px rgba(0, 240, 255, 0.2);
-      max-width: 600px;
-      width: 100%;
-    }
-    .instrucoes-container h1 {
-      color: var(--accent-neon);
-      margin-top: 0;
-      text-shadow: 0 0 10px rgba(255, 251, 0, 0.5);
-      text-transform: uppercase;
-      letter-spacing: 2px;
-      margin-bottom: 40px;
-    }
-    .topic-link {
-      display: block;
-      margin: 20px 0;
-      padding: 20px;
-      background: rgba(0, 240, 255, 0.05);
-      border: 1px solid var(--accent);
-      color: #fff;
-      text-decoration: none;
-      font-size: 18px;
-      font-weight: bold;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-      transition: all 0.3s ease;
-      border-left: 4px solid var(--accent);
-    }
-    .topic-link:hover {
-      background: rgba(0, 240, 255, 0.15);
-      box-shadow: 0 0 15px rgba(0, 240, 255, 0.4);
-      transform: translateY(-2px);
-      border-left-color: var(--accent-neon);
-      color: var(--accent-neon);
-    }
-  </style>
+  <script>
+    try {
+      const tema = localStorage.getItem("omniai-tema");
+      if (tema === "light" || tema === "dark") document.documentElement.dataset.theme = tema;
+    } catch {}
+  </script>
 </head>
-<body>
-  <div class="instrucoes-container">
-    <h1>Instruções</h1>
-    <a href="roteiro_voto.html" class="topic-link">
-      1 - Como elaborar voto
+
+<body class="doc">
+  <a class="pular" href="#conteudo">Pular para o conteúdo</a>
+
+  <header class="topbar">
+    <a class="brand" href="./" aria-label="OmniAI · Jurisprudência, página inicial">
+      <span class="brand-mark" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="assets/icones.svg#balanca" /></svg></span>
+      <span>OmniAI<span class="brand-sep"> · </span><span class="brand-produto">Jurisprudência</span></span>
     </a>
-    <a href="https://drive.google.com/drive/folders/1k8K3eUxbiuRlLcRZhVXwx4fyr3P94zcZ?usp=sharing" target="_blank" class="topic-link">
-      2 - Modelos
-    </a>
-    <a href="tutoriais.html" class="topic-link">
-      3 - Vídeos tutoriais
-    </a>
-    <a href="ia.html" class="topic-link">
-      4 - Como funciona a IA do site
-    </a>
-  </div>
+    <nav class="topnav" aria-label="Principal">
+      <div class="modos">
+        <a class="modo" href="./">Decisões</a>
+        <a class="modo" href="pareceres/">Pareceres</a>
+        <a class="modo" href="legislacao/">Legislação</a>
+      </div>
+      <a class="nav-link" href="ia.html">Como funciona a IA</a>
+      <a class="nav-link" href="sobre.html">Sobre</a>
+    </nav>
+    <div class="topbar-acoes">
+      <details class="menu">
+        <summary class="icon-btn" aria-label="Mais opções">
+          <svg class="icon" aria-hidden="true"><use href="assets/icones.svg#mais" /></svg><span class="menu-rotulo">Mais</span>
+        </summary>
+        <div class="menu-painel">
+          <div class="so-mobile">
+            <a href="./"><svg class="icon" aria-hidden="true"><use href="assets/icones.svg#balanca" /></svg>Decisões</a>
+            <a href="pareceres/"><svg class="icon" aria-hidden="true"><use href="assets/icones.svg#pasta" /></svg>Pareceres</a>
+            <a href="legislacao/"><svg class="icon" aria-hidden="true"><use href="assets/icones.svg#livro" /></svg>Legislação</a>
+          </div>
+          <div class="so-medio">
+            <a href="ia.html"><svg class="icon" aria-hidden="true"><use href="assets/icones.svg#faisca" /></svg>Como funciona a IA</a>
+            <a href="sobre.html"><svg class="icon" aria-hidden="true"><use href="assets/icones.svg#info" /></svg>Sobre o projeto</a>
+            <div class="menu-sep"></div>
+          </div>
+          <div class="menu-titulo">Para quem vota nas Juntas</div>
+          <a href="https://drive.google.com/drive/folders/1YDlwa0MiwxSYp5H8YgRgQfdKc9hQhJph?usp=sharing" target="_blank" rel="noopener">
+            <svg class="icon" aria-hidden="true"><use href="assets/icones.svg#pasta" /></svg>Drive · Decisões por lei
+            <svg class="icon externo" aria-hidden="true"><use href="assets/icones.svg#externo" /></svg></a>
+          <a href="https://drive.google.com/drive/folders/1k8K3eUxbiuRlLcRZhVXwx4fyr3P94zcZ?usp=sharing" target="_blank" rel="noopener">
+            <svg class="icon" aria-hidden="true"><use href="assets/icones.svg#documento" /></svg>Drive · Modelos de voto
+            <svg class="icon externo" aria-hidden="true"><use href="assets/icones.svg#externo" /></svg></a>
+          <a href="instrucoes.html"><svg class="icon" aria-hidden="true"><use href="assets/icones.svg#info" /></svg>Instruções</a>
+          <a href="roteiro_voto.html"><svg class="icon" aria-hidden="true"><use href="assets/icones.svg#livro" /></svg>Roteiro para elaborar voto</a>
+          <a href="tutoriais.html"><svg class="icon" aria-hidden="true"><use href="assets/icones.svg#video" /></svg>Vídeos tutoriais</a>
+        </div>
+      </details>
+      <button class="icon-btn tema-toggle" type="button" aria-label="Alternar tema">
+        <svg class="icon icon-lua" aria-hidden="true"><use href="assets/icones.svg#lua" /></svg>
+        <svg class="icon icon-sol" aria-hidden="true"><use href="assets/icones.svg#sol" /></svg>
+      </button>
+    </div>
+  </header>
+
+  <main id="conteudo" class="pagina">
+    <a class="voltar" href="./"><svg class="icon icon-sm" aria-hidden="true"><use href="assets/icones.svg#seta-esquerda" /></svg>Voltar para a busca</a>
+    <header class="pagina-head">
+      <h1>Instruções</h1>
+      <p>Material de apoio para quem elabora votos nas Juntas Integradas de Julgamento Fiscal.</p>
+    </header>
+    <div class="topicos">
+      <a class="topico" href="roteiro_voto.html">
+        <span class="topico-icone"><svg class="icon" aria-hidden="true"><use href="assets/icones.svg#livro" /></svg></span>
+        <span><strong>Como elaborar um voto</strong><small>Roteiro prático: tempestividade, legitimidade e mérito.</small></span>
+        <svg class="icon" aria-hidden="true"><use href="assets/icones.svg#proxima" /></svg>
+      </a>
+      <a class="topico" href="https://drive.google.com/drive/folders/1k8K3eUxbiuRlLcRZhVXwx4fyr3P94zcZ?usp=sharing" target="_blank" rel="noopener">
+        <span class="topico-icone"><svg class="icon" aria-hidden="true"><use href="assets/icones.svg#documento" /></svg></span>
+        <span><strong>Modelos de voto</strong><small>Pasta no Google Drive com os modelos usados nas Juntas.</small></span>
+        <svg class="icon" aria-hidden="true"><use href="assets/icones.svg#externo" /></svg>
+      </a>
+      <a class="topico" href="tutoriais.html">
+        <span class="topico-icone"><svg class="icon" aria-hidden="true"><use href="assets/icones.svg#video" /></svg></span>
+        <span><strong>Vídeos tutoriais</strong><small>BH Digital, autuação e elaboração do voto, passo a passo.</small></span>
+        <svg class="icon" aria-hidden="true"><use href="assets/icones.svg#proxima" /></svg>
+      </a>
+      <a class="topico" href="ia.html">
+        <span class="topico-icone"><svg class="icon" aria-hidden="true"><use href="assets/icones.svg#faisca" /></svg></span>
+        <span><strong>Como funciona a IA do site</strong><small>Busca por significado, casos semelhantes e o quanto dá para confiar.</small></span>
+        <svg class="icon" aria-hidden="true"><use href="assets/icones.svg#proxima" /></svg>
+      </a>
+    </div>
+  </main>
+
+  <footer class="rodape">
+    <div class="rodape-inner">
+      <span>OmniAI · Jurisprudência — projeto de Saulo Hugo Rossi</span>
+      <nav aria-label="Rodapé">
+        <a href="sobre.html">Sobre</a>
+        <a href="ia.html">Como funciona a IA</a>
+        <a href="instrucoes.html">Instruções</a>
+        <a href="https://drive.google.com/drive/folders/1YDlwa0MiwxSYp5H8YgRgQfdKc9hQhJph?usp=sharing" target="_blank" rel="noopener">Drive · Decisões por lei</a>
+        <a href="https://drive.google.com/drive/folders/1k8K3eUxbiuRlLcRZhVXwx4fyr3P94zcZ?usp=sharing" target="_blank" rel="noopener">Drive · Modelos</a>
+        <a href="https://github.com/sauliiin/jurisprudencia-juntas" target="_blank" rel="noopener">GitHub</a>
+      </nav>
+    </div>
+  </footer>
+
+  <script src="site.js" defer></script>
 </body>
+
 </html>

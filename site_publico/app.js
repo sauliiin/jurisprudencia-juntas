@@ -25,6 +25,7 @@ const state = {
   autosDrive: null,
   iaInfracao: null,
   iaTermos: 0,
+  iaResultados: null,
 };
 
 // Busca por significado: só os mais próximos interessam; abaixo disso vira ruído.
@@ -59,7 +60,14 @@ const els = {
   showFile: document.querySelector("#show-file"),
   similares: document.querySelector("#similares"),
   iaHint: document.querySelector("#ia-hint"),
+  numVotos: document.querySelector("#num-votos"),
+  numAutos: document.querySelector("#num-autos"),
+  detailResultado: document.querySelector("#detail-resultado"),
+  detailMeta: document.querySelector("#detail-meta"),
+  copyLink: document.querySelector("#copy-link"),
 };
+
+const ICONES = "assets/icones.svg";
 
 function escapeHtml(value = "") {
   return String(value)
@@ -97,6 +105,12 @@ const RESULTADOS_NO_NOME = [
   [/\bdeferid[oa]\b/, "Deferido"],
 ];
 
+// "DEIXAR DE CONSTRUIR..." -> "Deixar de construir...": mais fácil de ler que caixa-alta.
+function emFrase(texto = "") {
+  const frase = String(texto).replace(/\s+/g, " ").trim().toLocaleLowerCase("pt-BR");
+  return frase.charAt(0).toLocaleUpperCase("pt-BR") + frase.slice(1);
+}
+
 function infracaoResumida(infracao = "") {
   const texto = String(infracao).replace(/\s+/g, " ").trim().toLocaleLowerCase("pt-BR");
   if (!texto) return "";
@@ -122,6 +136,118 @@ function tituloPublico(record) {
   ]
     .filter(Boolean)
     .join(" · ");
+}
+
+// ---------- Apresentação ----------
+
+function icone(nome, classe = "icon") {
+  return `<svg class="${classe}" aria-hidden="true"><use href="${ICONES}#${nome}"/></svg>`;
+}
+
+// Etiqueta do resultado: o do nome do arquivo (o mesmo do título) ou o que a IA leu do
+// "Dispositivo da decisão" no treino (API: campo resultado; estático: resultados.bin).
+const ETIQUETAS = {
+  indeferido: ["Indeferido", "tag-indeferido"],
+  deferido: ["Deferido", "tag-deferido"],
+  "parcialmente deferido": ["Parcialmente deferido", "tag-parcial"],
+  "não conhecido": ["Não conhecido", ""],
+  extinto: ["Extinto", ""],
+  diligência: ["Diligência", "tag-diligencia"],
+};
+
+function resultadoDe(record) {
+  const doNome = resultadoDoNome(record.nome_arquivo);
+  if (doNome) return doNome.toLocaleLowerCase("pt-BR");
+  return record.resultado || state.iaResultados?.get(record.file_id) || "";
+}
+
+function etiquetaHtml(record) {
+  const etiqueta = ETIQUETAS[resultadoDe(record)];
+  return etiqueta ? `<span class="tag ${etiqueta[1]}">${etiqueta[0]}</span>` : "";
+}
+
+// Data da decisão: a última data por extenso do texto (a da assinatura).
+const DATA_POR_EXTENSO = /\b(\d{1,2})º?\s+de\s+(janeiro|fevereiro|março|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\s+de\s+(20\d{2})\b/gi;
+const MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+
+function dataDe(record) {
+  if (record.data) {
+    const [ano, mes, dia] = record.data.split("-");
+    return `${dia}/${mes}/${ano}`;
+  }
+  if (record._data !== undefined) return record._data;
+  let ultima = null;
+  for (const achado of (record.texto || "").matchAll(DATA_POR_EXTENSO)) ultima = achado;
+  let data = "";
+  if (ultima) {
+    const mes = MESES.indexOf(ultima[2].toLocaleLowerCase("pt-BR").replace("marco", "março")) + 1;
+    data = `${ultima[1].padStart(2, "0")}/${String(mes).padStart(2, "0")}/${ultima[3]}`;
+  }
+  record._data = data;
+  return data;
+}
+
+function instanciaCurta(record) {
+  return (record.decisao_instancia || "").replace(/^Decisão de\s+/i, "") || "Decisão";
+}
+
+function leiDe(record) {
+  const auto = record.autos?.[0];
+  return auto?.dispositivo_legal_transgredido || auto?.lei || "";
+}
+
+// Similaridade da IA (cosseno) como rótulo, não como número.
+function similaridadeHtml(score) {
+  if (!score) return "";
+  if (score >= 0.75) return '<span class="sim sim-forte">muito parecido</span>';
+  if (score >= 0.55) return '<span class="sim">parecido</span>';
+  return '<span class="sim">relacionado</span>';
+}
+
+function skeletonHtml(quantos = 6) {
+  const cartao = `
+    <div class="skeleton" aria-hidden="true">
+      <div class="skeleton-linha curta"></div>
+      <div class="skeleton-linha grossa media"></div>
+      <div class="skeleton-linha"></div>
+      <div class="skeleton-linha media"></div>
+    </div>`;
+  return `<span class="sr-only">Buscando…</span>${cartao.repeat(quantos)}`;
+}
+
+function formatarNumero(valor) {
+  return Number(valor).toLocaleString("pt-BR");
+}
+
+function atualizarNumeros(votos, autos) {
+  els.stats.textContent = `${formatarNumero(votos)} decisões · ${formatarNumero(autos)} autos`;
+  if (els.numVotos) els.numVotos.textContent = formatarNumero(votos);
+  if (els.numAutos) els.numAutos.textContent = formatarNumero(autos);
+}
+
+// A home aparece até a primeira busca (ou filtro); depois, lista e detalhe.
+function atualizarHome() {
+  const ativo = Boolean(
+    state.query || state.month || state.year || state.instancia !== "todas" || state.selected
+  );
+  document.body.classList.toggle("tem-busca", ativo);
+}
+
+// Resultados e métricas do modelo publicado; no modo estático o modelo leve já é
+// baixado para os casos semelhantes, então sai junto com o acervo.
+async function carregarDadosIA() {
+  try {
+    const [resultados, avaliacao] = await Promise.all([IA.resultados(), IA.avaliacao()]);
+    state.iaResultados = resultados;
+    for (const elemento of document.querySelectorAll("[data-metrica]")) {
+      const valor = avaliacao[elemento.dataset.metrica];
+      if (typeof valor === "number") elemento.textContent = `${Math.round(valor * 100)}%`;
+    }
+    if (state.items.length) renderResults();
+    if (state.selected) renderDetailTags(state.selected);
+  } catch {
+    // Sem os arquivos da IA o site segue sem as etiquetas vindas do modelo.
+  }
 }
 
 function hiddenDatePhrase() {
@@ -264,7 +390,7 @@ function fillYearFilter(records) {
   for (let year = currentYear; year >= 2022; year -= 1) {
     years.push(String(year));
   }
-  els.year.innerHTML = '<option value="">Ano</option>' + years.map((year) => `<option value="${year}">${year}</option>`).join("");
+  els.year.innerHTML = '<option value="">Todos</option>' + years.map((year) => `<option value="${year}">${year}</option>`).join("");
 }
 
 function highlight(value, terms) {
@@ -358,7 +484,7 @@ async function apiAvailable() {
 async function loadStaticData() {
   if (state.records.length || state.loadingData) return;
   state.loadingData = true;
-  els.stats.textContent = "Carregando índice";
+  els.stats.textContent = "Carregando o acervo…";
   const response = await fetch(DATA_URL);
   if (!response.ok) throw new Error(`Não foi possível carregar ${DATA_URL}`);
   const text = await response.text();
@@ -373,7 +499,7 @@ async function loadStaticData() {
   state.loadingData = false;
   fillYearFilter(records);
   const autos = records.reduce((sum, record) => sum + (record.autos?.length || 0), 0);
-  els.stats.textContent = `${records.length.toLocaleString("pt-BR")} votos · ${autos.toLocaleString("pt-BR")} autos`;
+  atualizarNumeros(records.length, autos);
 }
 
 // Manifesto dos autos baixados do SIF. Dois formatos aceitos:
@@ -413,10 +539,11 @@ async function init() {
     els.searchMode.querySelector('option[value="semantic"]')?.remove();
     state.searchMode = els.searchMode.value;
     const stats = await fetchJson("/api/stats");
-    els.stats.textContent = `${stats.votos.toLocaleString("pt-BR")} votos · ${stats.autos.toLocaleString("pt-BR")} autos`;
+    atualizarNumeros(stats.votos, stats.autos);
   } else {
     state.mode = "static";
     await loadStaticData();
+    carregarDadosIA();
   }
   await runSearch();
 }
@@ -435,12 +562,13 @@ function searchUrl(fetchOffset) {
 }
 
 async function runSearch({ append = false, keepOffset = false } = {}) {
+  atualizarHome();
   if (!append && !keepOffset) {
     state.offset = 0;
   }
   if (!append) {
     state.items = [];
-    els.results.innerHTML = '<div class="loading">Buscando...</div>';
+    els.results.innerHTML = skeletonHtml();
   }
 
   let fetchOffset = state.offset;
@@ -534,23 +662,25 @@ function renderIaHint() {
   const infracao = state.iaInfracao;
   const provavel =
     infracao && infracao.probabilidade >= 0.35
-      ? ` Infração provável: ${infracao.nome} (${Math.round(infracao.probabilidade * 100)}%).`
+      ? ` Infração provável: ${emFrase(infracao.nome)} (${Math.round(infracao.probabilidade * 100)}%).`
       : "";
-  els.iaHint.innerHTML = `Ordenado por proximidade de significado.${escapeHtml(provavel)} <a href="ia.html" target="_blank">Como funciona</a>`;
+  els.iaHint.innerHTML = `${icone("faisca", "icon icon-sm")}<span>Ordenado por proximidade de significado.${escapeHtml(provavel)} <a href="ia.html">Como funciona</a></span>`;
 }
 
 function renderResults() {
   renderIaHint();
   const shown = state.items.length;
   const endOfShown = state.offset + shown;
-  els.resultCount.textContent = `${endOfShown.toLocaleString("pt-BR")} de ${state.total.toLocaleString("pt-BR")} resultados`;
+  els.resultCount.textContent = state.total
+    ? `${(state.offset + 1).toLocaleString("pt-BR")}–${endOfShown.toLocaleString("pt-BR")} de ${state.total.toLocaleString("pt-BR")} resultados`
+    : "Nenhum resultado";
 
   if (state.total > state.limit) {
     els.paginationBar.hidden = false;
     const startPage = Math.floor(state.offset / state.limit) + 1;
     const endPage = Math.floor((state.offset + shown - 1) / state.limit) + 1;
     const totalPages = Math.ceil(state.total / state.limit);
-    
+
     if (startPage === endPage) {
       els.pageInfo.textContent = `Página ${startPage} de ${totalPages}`;
     } else {
@@ -564,7 +694,7 @@ function renderResults() {
   }
 
   if (!shown) {
-    els.results.innerHTML = '<div class="empty-list">Nenhum resultado</div>';
+    els.results.innerHTML = '<div class="empty-list">Nenhuma decisão encontrada. Tente outras palavras ou outro modo de busca.</div>';
     return;
   }
 
@@ -572,14 +702,19 @@ function renderResults() {
     .map((item) => {
       const active = state.selected?.file_id === item.file_id ? " active" : "";
       const autos = (item.autos || []).slice(0, 4).map((auto) => `<span class="chip">${escapeHtml(auto.numero)}</span>`).join("");
+      const meta = [instanciaCurta(item), dataDe(item), item.protocolo || "sem protocolo"].filter(Boolean);
+      const lei = leiDe(item);
       return `
-        <button class="result${active}" type="button" data-file-id="${escapeHtml(item.file_id)}">
+        <button class="result${active}" type="button" data-file-id="${escapeHtml(item.file_id)}"${active ? ' aria-current="true"' : ""}>
+          <span class="result-topo">
+            ${etiquetaHtml(item)}
+            <span class="result-meta">${escapeHtml(meta.join(" · "))}</span>
+            ${similaridadeHtml(item.ia_similaridade)}
+          </span>
           <span class="result-title">${escapeHtml(tituloPublico(item))}</span>
-          <span class="result-meta">${escapeHtml(item.decisao_instancia)} · ${escapeHtml(item.protocolo || "sem protocolo")}${
-            item.ia_similaridade ? ` · similaridade ${Math.round(item.ia_similaridade * 100)}%` : ""
-          }</span>
+          ${lei ? `<span class="result-lei">${icone("balanca", "icon icon-sm")}<span>${escapeHtml(lei)}</span></span>` : ""}
           <span class="result-snippet">${state.mode === "api" ? snippetHtml(item.trecho || "") : item.trecho || ""}</span>
-          <span class="result-autos">${autos || '<span class="chip">sem auto</span>'}</span>
+          ${autos ? `<span class="result-autos">${autos}</span>` : ""}
         </button>
       `;
     })
@@ -597,6 +732,37 @@ async function selectVoto(fileId) {
   renderDetail();
 }
 
+function renderDetailTags(item) {
+  const etiqueta = ETIQUETAS[resultadoDe(item)];
+  els.detailResultado.hidden = !etiqueta;
+  if (etiqueta) {
+    els.detailResultado.className = `tag ${etiqueta[1]}`;
+    els.detailResultado.textContent = etiqueta[0];
+  }
+}
+
+function renderDetailMeta(item) {
+  const autos = item.autos || [];
+  const campos = [
+    ["Processo", item.protocolo || "—"],
+    ["Instância", instanciaCurta(item)],
+    ["Data", dataDe(item) || "—"],
+    ["Autos", autos.length ? String(autos.length) : "—"],
+    ["Lei", autos[0]?.lei || "—"],
+  ];
+  els.detailMeta.innerHTML = campos
+    .map(([rotulo, valor]) => `<div><dt>${rotulo}</dt><dd>${escapeHtml(valor)}</dd></div>`)
+    .join("");
+}
+
+function linkDaDecisao(fileId) {
+  const url = new URL(window.location.href);
+  url.search = "";
+  url.hash = "";
+  url.searchParams.set("voto", fileId);
+  return url.toString();
+}
+
 function renderDetail() {
   const item = state.selected;
   if (!item) {
@@ -612,18 +778,21 @@ function renderDetail() {
   }, 220);
   els.detail.hidden = false;
   els.detailPane.scrollTop = 0;
+  els.detailInstance.textContent = item.decisao_instancia;
+  renderDetailTags(item);
   els.detailTitle.textContent = tituloPublico(item);
   els.detailSubtitle.textContent = item.assunto || item.protocolo || "";
-  els.detailInstance.textContent = item.decisao_instancia;
   if (item.tem_arquivo_publico) {
     els.openFile.href = item.drive_view_url;
     els.openFile.removeAttribute("aria-disabled");
-    els.openFile.textContent = "Abrir inteiro";
+    els.openFile.innerHTML = `${icone("externo")}Abrir documento`;
   } else {
     els.openFile.removeAttribute("href");
     els.openFile.setAttribute("aria-disabled", "true");
     els.openFile.textContent = "Sem arquivo público";
   }
+  els.copyLink.querySelector("span").textContent = "Copiar link";
+  renderDetailMeta(item);
   els.autos.innerHTML = renderAutos(item.autos || []);
   renderSimilares(item);
   renderPreview();
@@ -671,30 +840,32 @@ async function renderSimilares(item) {
       <strong>Casos semelhantes</strong>
       <span class="badge">IA</span>
       <span class="similares-resumo">${escapeHtml(resumo)}</span>
-      <a href="ia.html" target="_blank">Como funciona</a>
+      <a href="ia.html">Como funciona</a>
     </div>
+    <div class="similares-lista">
     ${linhas
       .map(
         (linha) => `
       <button class="similar" type="button" data-file-id="${escapeHtml(linha.id)}">
         <span class="similar-title">${escapeHtml(tituloPublico(linha.record))}</span>
         <span class="similar-meta">${escapeHtml(linha.record.decisao_instancia)}${
-          linha.resultado ? ` · <b>${escapeHtml(linha.resultado)}</b>` : ""
+          ETIQUETAS[linha.resultado] ? ` <span class="tag ${ETIQUETAS[linha.resultado][1]}">${ETIQUETAS[linha.resultado][0]}</span>` : ""
         }</span>
         ${
           infracaoDe(linha.record) && infracaoDe(linha.record) !== infracaoAtual
-            ? `<span class="similar-infracao">${escapeHtml(infracaoDe(linha.record))}</span>`
+            ? `<span class="similar-infracao">${escapeHtml(infracaoResumida(infracaoDe(linha.record)))}</span>`
             : ""
         }
       </button>`
       )
       .join("")}
+    </div>
   `;
   els.similares.hidden = false;
 }
 
 function renderAutos(autos = []) {
-  if (!autos.length) return '<div class="auto-row"><strong>Sem autos no assunto</strong></div>';
+  if (!autos.length) return '<div class="auto-row"><span class="muted">Nenhum auto citado no assunto da decisão.</span></div>';
   return autos
     .map(
       (auto) => {
@@ -718,17 +889,17 @@ function renderAutos(autos = []) {
         }
 
         return `
-      <section class="auto-row">
+      <div class="auto-row">
         <div>
           ${numeroHtml}
           <span class="badge">${badge}</span>
         </div>
         <div class="auto-fields">
-          <div><span>Infração</span> ${escapeHtml(auto.infracao || "—")}</div>
+          <div><span>Infração</span> ${escapeHtml(emFrase(auto.infracao) || "—")}</div>
           <div><span>Dispositivo</span> ${escapeHtml(auto.dispositivo_legal_transgredido || "—")}</div>
           <div><span>Local</span> ${escapeHtml(auto.local_constatacao || "—")}</div>
         </div>
-      </section>
+      </div>
     `;
       }
     )
@@ -838,11 +1009,13 @@ els.similares.addEventListener("click", (event) => {
 els.pageNext.addEventListener("click", () => {
   state.offset = state.offset + state.items.length;
   runSearch({ append: false, keepOffset: true });
+  els.results.scrollTo?.({ top: 0 });
 });
 
 els.pagePrev.addEventListener("click", () => {
   state.offset = Math.max(0, state.offset - state.limit);
   runSearch({ append: false, keepOffset: true });
+  els.results.scrollTo?.({ top: 0 });
 });
 
 els.showText.addEventListener("click", () => {
@@ -855,7 +1028,41 @@ els.showFile.addEventListener("click", () => {
   renderPreview();
 });
 
-init().catch((error) => {
+for (const botao of document.querySelectorAll("[data-busca]")) {
+  botao.addEventListener("click", () => {
+    els.input.value = botao.dataset.busca;
+    state.query = botao.dataset.busca;
+    runSearch();
+    els.input.focus({ preventScroll: true });
+  });
+}
+
+els.copyLink.addEventListener("click", async () => {
+  if (!state.selected) return;
+  const rotulo = els.copyLink.querySelector("span");
+  try {
+    await navigator.clipboard.writeText(linkDaDecisao(state.selected.file_id));
+    rotulo.textContent = "Link copiado";
+  } catch {
+    rotulo.textContent = "Não foi possível copiar";
+  }
+  window.setTimeout(() => (rotulo.textContent = "Copiar link"), 2000);
+});
+
+// Link direto para uma decisão (?voto=<file_id>), gerado por "Copiar link".
+async function abrirDoLink() {
+  const fileId = new URLSearchParams(window.location.search).get("voto");
+  if (!fileId) return;
+  const record = await recordById(fileId);
+  if (!record) return;
+  state.selected = record;
+  atualizarHome();
+  state.previewMode = chooseInitialPreviewMode(record);
+  renderResults();
+  renderDetail();
+}
+
+init().then(abrirDoLink).catch((error) => {
   els.stats.textContent = "Falha ao carregar";
   els.results.innerHTML = `<div class="error">${escapeHtml(error.message)}</div>`;
 });
