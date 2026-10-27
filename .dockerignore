@@ -1,0 +1,11 @@
+# Lista de permissão: só a API, o site e as dependências entram no contexto do build.
+# Ficam de fora dados brutos (votos_brutos/, pareceres_brutos/, legislacao_brutos/,
+# pdfs_por_lei_e_ato/), bancos locais (*.db), site_data/ (entra por volume), .git,
+# .venv, caches, credenciais e .env.
+*
+!api/
+!site_publico/
+!requirements-api.txt
+**/__pycache__
+**/*.py[cod]
+site_publico/Autos/*.pdf
