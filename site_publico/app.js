@@ -144,8 +144,8 @@ function localFileUrl(fileId) {
 
 function decorate(record) {
   const fileId = record.file_id;
-  const path = record.caminho_bruto || "";
-  const ext = path.split(".").pop()?.toLowerCase() || "";
+  // A extensão vem do nome do arquivo: o caminho local não é publicado.
+  const ext = record.ext || (record.nome_arquivo || "").match(/\.([a-z0-9]+)$/i)?.[1].toLowerCase() || "";
   const publicFileId = record.drive_file_id_publico || record.public_drive_file_id || "";
   record.ext = ext;
   record.file_url = record.file_url || localFileUrl(fileId);

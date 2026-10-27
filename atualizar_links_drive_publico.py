@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sqlite3
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
@@ -97,7 +98,25 @@ def _drive_preview_url(file_id: str) -> str:
     return f"https://drive.google.com/file/d/{quote(file_id, safe='')}/preview"
 
 
-def atualizar_jsonl(jsonl_path: Path, by_name: dict[str, list[dict]]) -> tuple[int, int, int]:
+def _nomes_locais(indice_path: Path) -> dict[str, str]:
+    """file_id -> nome do arquivo em votos_brutos/, lido do índice SQLite local.
+
+    O JSONL publicado não traz mais caminho_bruto (é um caminho desta máquina).
+    """
+    if not indice_path.exists():
+        print(f"[aviso] índice não encontrado: {indice_path}", flush=True)
+        return {}
+    con = sqlite3.connect(f"file:{indice_path}?mode=ro", uri=True)
+    try:
+        rows = con.execute("SELECT file_id, caminho_bruto FROM votos").fetchall()
+    finally:
+        con.close()
+    return {file_id: Path(caminho or "").name for file_id, caminho in rows}
+
+
+def atualizar_jsonl(
+    jsonl_path: Path, by_name: dict[str, list[dict]], nomes_locais: dict[str, str]
+) -> tuple[int, int, int]:
     tmp = jsonl_path.with_suffix(jsonl_path.suffix + ".part")
     total = 0
     matched = 0
@@ -109,7 +128,8 @@ def atualizar_jsonl(jsonl_path: Path, by_name: dict[str, list[dict]]) -> tuple[i
                 continue
             total += 1
             record = json.loads(line)
-            local_name = Path(record.get("caminho_bruto", "")).name
+            caminho = record.pop("caminho_bruto", "")
+            local_name = nomes_locais.get(record.get("file_id", "")) or Path(caminho).name
             matches = by_name.get(local_name, [])
             if matches:
                 if len(matches) > 1:
@@ -132,6 +152,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("folder_id", help="ID da pasta pública votos_brutos no Google Drive.")
     parser.add_argument("--jsonl", default="site_data/votos.jsonl")
     parser.add_argument("--marco", default=MARCO_DEFAULT)
+    parser.add_argument("--indice", default="indice_busca.db")
     parser.add_argument("--credentials", default="credentials.json")
     parser.add_argument("--token", default="token.json")
     return parser.parse_args()
@@ -147,7 +168,7 @@ def main() -> int:
     _load_creds(Path(args.credentials), Path(args.token))
     service = _new_service(Path(args.token))
     by_name = listar_arquivos(service, args.folder_id)
-    total, matched, duplicates = atualizar_jsonl(jsonl_path, by_name)
+    total, matched, duplicates = atualizar_jsonl(jsonl_path, by_name, _nomes_locais(Path(args.indice)))
 
     missing = total - matched
     marco_path = Path(args.marco)

@@ -959,7 +959,7 @@ class IndexStore:
             votos = self.con.execute(
                 """
                 SELECT file_id, nome_arquivo, instancia, decisao_instancia,
-                       caminho_bruto, protocolo, assunto, texto
+                       protocolo, assunto, texto
                   FROM votos
                  ORDER BY decisao_instancia, nome_arquivo
                 """
@@ -982,9 +982,9 @@ class IndexStore:
                         "nome_arquivo": row[1],
                         "instancia": row[2],
                         "decisao_instancia": row[3],
-                        "caminho_bruto": row[4],
-                        "protocolo": row[5] or "",
-                        "assunto": row[6] or "",
+                        # caminho_bruto fica só no SQLite: é um caminho desta máquina.
+                        "protocolo": row[4] or "",
+                        "assunto": row[5] or "",
                         "autos": [
                             asdict(
                                 AutoInfo(
@@ -1003,7 +1003,7 @@ class IndexStore:
                         ],
                     }
                     if include_text:
-                        payload["texto"] = row[7] or ""
+                        payload["texto"] = row[6] or ""
                     payload.update(public_links.get(row[0], {}))
                     payload = _payload_publico(payload)
                     fh.write(json.dumps(payload, ensure_ascii=False) + "\n")
