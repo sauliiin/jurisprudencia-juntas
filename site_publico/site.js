@@ -1,25 +1,32 @@
-// Comportamento comum a todas as páginas: tema claro/escuro, menu "Mais", botão de
+// Comportamento comum a todas as páginas: tema (claro, escuro, cyberpunk), menu "Mais", botão de
 // filtros e, no celular, o detalhe em tela cheia com "Voltar". Não toca na busca.
 (() => {
   const raiz = document.documentElement;
   const CHAVE_TEMA = "omniai-tema";
   const celular = window.matchMedia("(max-width: 860px)");
 
+  // O botão gira claro → escuro → cyberpunk; sem escolha salva, vale o tema do sistema.
+  const TEMAS = ["light", "dark", "cyberpunk"];
+  const NOMES = { light: "claro", dark: "escuro", cyberpunk: "cyberpunk" };
+
   function temaAtual() {
-    if (raiz.dataset.theme) return raiz.dataset.theme;
+    if (TEMAS.includes(raiz.dataset.theme)) return raiz.dataset.theme;
     return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
   }
 
+  function proximoTema() {
+    return TEMAS[(TEMAS.indexOf(temaAtual()) + 1) % TEMAS.length];
+  }
+
   function rotularTema(botao) {
-    const escuro = temaAtual() === "dark";
-    botao.setAttribute("aria-label", escuro ? "Usar tema claro" : "Usar tema escuro");
-    botao.title = botao.getAttribute("aria-label");
+    botao.setAttribute("aria-label", `Tema ${NOMES[temaAtual()]}; mudar para ${NOMES[proximoTema()]}`);
+    botao.title = `Mudar para o tema ${NOMES[proximoTema()]}`;
   }
 
   for (const botao of document.querySelectorAll(".tema-toggle")) {
     rotularTema(botao);
     botao.addEventListener("click", () => {
-      const novo = temaAtual() === "dark" ? "light" : "dark";
+      const novo = proximoTema();
       raiz.dataset.theme = novo;
       try {
         localStorage.setItem(CHAVE_TEMA, novo);

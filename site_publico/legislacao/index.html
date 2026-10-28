@@ -27,7 +27,7 @@
   <script>
     try {
       const tema = localStorage.getItem("omniai-tema");
-      if (tema === "light" || tema === "dark") document.documentElement.dataset.theme = tema;
+      if (["light", "dark", "cyberpunk"].includes(tema)) document.documentElement.dataset.theme = tema;
     } catch {}
   </script>
 </head>
@@ -86,6 +86,7 @@
       <button class="icon-btn tema-toggle" type="button" aria-label="Alternar tema">
         <svg class="icon icon-lua" aria-hidden="true"><use href="../assets/icones.svg#lua" /></svg>
         <svg class="icon icon-sol" aria-hidden="true"><use href="../assets/icones.svg#sol" /></svg>
+        <svg class="icon icon-raio" aria-hidden="true"><use href="../assets/icones.svg#raio" /></svg>
       </button>
     </div>
   </header>

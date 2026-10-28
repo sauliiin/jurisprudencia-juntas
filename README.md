@@ -54,7 +54,7 @@ que estão em outro sistema (SIF). Este projeto junta tudo num buscador:
 - **Casos semelhantes:** as cinco decisões mais parecidas e como cada uma foi julgada.
 - **Pareceres e legislação:** os mesmos recursos para o acervo de pareceres e para a legislação municipal
   dividida em artigos, com "artigos semelhantes".
-- **Visual atual:** tema claro e escuro, layout de celular com filtros recolhidos e detalhe em tela cheia,
+- **Visual atual:** temas claro, escuro e cyberpunk (a paleta neon do site original), layout de celular com filtros recolhidos e detalhe em tela cheia,
   acessibilidade (contraste AA, foco visível, navegação por teclado).
 - **Dois modos de implantação:** com a API (busca no servidor, download inicial pequeno) ou estático no
   GitHub Pages (o navegador baixa o acervo e busca sozinho).

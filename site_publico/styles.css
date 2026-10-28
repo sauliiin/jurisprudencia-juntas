@@ -1,6 +1,6 @@
 /* OmniAI · Jurisprudência — sistema visual compartilhado por todas as páginas.
-   Tema claro padrão, escuro (grafite) por prefers-color-scheme ou pelo botão de tema,
-   que grava data-theme no <html>. */
+   Tema claro padrão, escuro (grafite) por prefers-color-scheme e cyberpunk (a paleta neon
+   do site original). O botão de tema alterna os três e grava data-theme no <html>. */
 
 @font-face {
   font-family: "Inter";
@@ -89,7 +89,7 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
+  :root:not([data-theme]) {
     color-scheme: dark;
     --bg: #1a1a1f;
     --surface: #26262d;
@@ -178,6 +178,53 @@
   --titulo-b: #a5b4fc;
   --shadow-menu: 0 12px 32px rgba(0, 0, 0, 0.5), 0 1px 3px rgba(0, 0, 0, 0.4);
   --focus: 0 0 0 2px var(--surface), 0 0 0 4px #2dd4bf;
+}
+
+
+/* Cyberpunk: as cores do site original (preto-azulado, ciano, rosa e amarelo neon). */
+:root[data-theme="cyberpunk"] {
+  color-scheme: dark;
+  --bg: #050608;
+  --surface: #0b0d14;
+  --surface-2: #11141d;
+  --surface-hover: #141a27;
+  --line: #1c2735;
+  --line-strong: #2b3d55;
+  --ink: #e0f4ff;
+  --ink-2: #c4def0;
+  --muted: #9ab2c8;
+  --subtle: #8aa2b8;
+  --accent: #00f0ff;
+  --accent-hover: #7ff8ff;
+  --accent-ink: #00181b;
+  --accent-soft: rgba(0, 240, 255, 0.1);
+  --accent-text: #00f0ff;
+  --busca-bg: #080a10;
+  --field-bg: #0d111a;
+  --field-border: #1f7480;
+  --field-border-hover: #00f0ff;
+  --field-shadow: 0 0 0 1px rgba(0, 240, 255, 0.05);
+  --mark-bg: #ffeb3b;
+  --mark-ink: #050608;
+  --ok-bg: rgba(0, 255, 159, 0.12);
+  --ok-ink: #3dffb5;
+  --bad-bg: rgba(255, 0, 85, 0.16);
+  --bad-ink: #ff5c93;
+  --warn-bg: rgba(255, 251, 0, 0.12);
+  --warn-ink: #fffb00;
+  --info-bg: rgba(0, 240, 255, 0.12);
+  --info-ink: #7ff8ff;
+  --neutral-bg: rgba(130, 154, 177, 0.16);
+  --neutral-ink: #b8cde0;
+  --hero-a: rgba(0, 240, 255, 0.14);
+  --hero-b: rgba(255, 0, 85, 0.12);
+  --shadow-card: 0 0 0 1px rgba(0, 240, 255, 0.04), 0 0 14px rgba(0, 240, 255, 0.05);
+  --shadow-hover: 0 0 0 1px rgba(0, 240, 255, 0.25), 0 0 20px rgba(0, 240, 255, 0.22);
+  --hero-dot: rgba(0, 240, 255, 0.14);
+  --titulo-a: #00f0ff;
+  --titulo-b: #ff2e7e;
+  --shadow-menu: 0 0 0 1px rgba(0, 240, 255, 0.2), 0 12px 32px rgba(0, 0, 0, 0.7);
+  --focus: 0 0 0 2px #050608, 0 0 0 4px #fffb00;
 }
 
 /* ---------- Base ---------- */
@@ -600,25 +647,28 @@ mark {
   display: none;
 }
 
-.tema-toggle .icon-sol {
+.tema-toggle .icon {
   display: none;
 }
 
-:root[data-theme="dark"] .tema-toggle .icon-sol {
+.tema-toggle .icon-lua,
+:root[data-theme="dark"] .tema-toggle .icon-raio,
+:root[data-theme="cyberpunk"] .tema-toggle .icon-sol {
   display: block;
 }
 
-:root[data-theme="dark"] .tema-toggle .icon-lua {
+:root[data-theme="dark"] .tema-toggle .icon-lua,
+:root[data-theme="cyberpunk"] .tema-toggle .icon-lua {
   display: none;
 }
 
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .tema-toggle .icon-sol {
-    display: block;
+  :root:not([data-theme]) .tema-toggle .icon-lua {
+    display: none;
   }
 
-  :root:not([data-theme="light"]) .tema-toggle .icon-lua {
-    display: none;
+  :root:not([data-theme]) .tema-toggle .icon-raio {
+    display: block;
   }
 }
 
@@ -2497,4 +2547,61 @@ body[data-ia="legislacao"] .text-preview {
 /* O anel de foco do teclado vale mais que a sombra dos cartões. */
 :is(.result, .exemplo, .btn, .topico, .similar, .modo, .nav-link):focus-visible {
   box-shadow: var(--focus);
+}
+
+/* ---------- Cyberpunk: toques neon do site original ---------- */
+
+:root[data-theme="cyberpunk"] body {
+  background:
+    linear-gradient(rgba(0, 240, 255, 0.035) 1px, transparent 1px) 0 0 / 40px 40px,
+    linear-gradient(90deg, rgba(255, 0, 85, 0.035) 1px, transparent 1px) 0 0 / 40px 40px,
+    var(--bg);
+  background-attachment: fixed;
+}
+
+:root[data-theme="cyberpunk"] .topbar,
+:root[data-theme="cyberpunk"] .busca {
+  border-bottom-color: rgba(0, 240, 255, 0.28);
+}
+
+:root[data-theme="cyberpunk"] .brand-mark {
+  box-shadow: 0 0 14px rgba(0, 240, 255, 0.55);
+}
+
+:root[data-theme="cyberpunk"] .modo[aria-current="page"],
+:root[data-theme="cyberpunk"] .metrica strong,
+:root[data-theme="cyberpunk"] .ia-numero strong {
+  text-shadow: 0 0 10px rgba(0, 240, 255, 0.55);
+}
+
+:root[data-theme="cyberpunk"] .btn-primary,
+:root[data-theme="cyberpunk"] .open-button {
+  background: linear-gradient(90deg, #ff0055, #ff2fa0);
+  color: #0a0005;
+  box-shadow: 0 0 16px rgba(255, 0, 85, 0.35);
+}
+
+:root[data-theme="cyberpunk"] .btn-primary:hover,
+:root[data-theme="cyberpunk"] .open-button:hover {
+  background: linear-gradient(90deg, #ff2e74, #ff5cb5);
+  color: #0a0005;
+  box-shadow: 0 0 22px rgba(255, 0, 85, 0.55);
+}
+
+:root[data-theme="cyberpunk"] .result.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent), 0 0 18px rgba(0, 240, 255, 0.3);
+}
+
+:root[data-theme="cyberpunk"] .secao-rotulo,
+:root[data-theme="cyberpunk"] .eyebrow .icon {
+  color: #fffb00;
+}
+
+:root[data-theme="cyberpunk"] .campo-busca input:focus {
+  box-shadow: 0 0 0 3px rgba(0, 240, 255, 0.18), 0 0 16px rgba(0, 240, 255, 0.25);
+}
+
+:root[data-theme="cyberpunk"] mark {
+  box-shadow: 0 0 8px rgba(255, 235, 59, 0.45);
 }
