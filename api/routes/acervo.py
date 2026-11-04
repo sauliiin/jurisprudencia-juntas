@@ -39,7 +39,14 @@ def search(
     offset: Annotated[int, Query(ge=0, le=1_000_000)] = 0,
 ) -> dict:
     parametros = busca.ParametrosBusca(
-        q=q, instancia=instancia, modo=modo, mes=mes, ano=ano, ordem=ordem, limit=min(limit, settings.max_limit), offset=offset
+        q=q,
+        instancia=instancia,
+        modo=modo,
+        mes=mes,
+        ano=ano,
+        ordem=ordem,
+        limit=min(limit, settings.max_limit),
+        offset=offset,
     )
     return busca.buscar(db, parametros)
 

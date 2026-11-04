@@ -115,7 +115,10 @@ def test_sem_consulta_das_mais_antigas(client: TestClient) -> None:
     assert datas[:3] == ["2024-01-15", "2024-02-02", "2025-03-10"]
 
 
-@pytest.mark.parametrize(("ordem", "esperado"), [("recentes", ["voto2", "voto7", "voto1"]), ("antigas", ["voto1", "voto7", "voto2"])])
+@pytest.mark.parametrize(
+    ("ordem", "esperado"),
+    [("recentes", ["voto2", "voto7", "voto1"]), ("antigas", ["voto1", "voto7", "voto2"])],
+)
 def test_consulta_ordenada_por_data(client: TestClient, ordem: str, esperado: list[str]) -> None:
     dados = client.get("/api/search", params={"q": "obra sem alvará", "ordem": ordem}).json()
     assert [item["file_id"] for item in dados["items"]] == esperado
