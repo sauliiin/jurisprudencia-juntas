@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 Instancia = Literal["todas", "1a_instancia", "2a_instancia"]
 ModoBusca = Literal["phrase", "words", "any"]
+Ordem = Literal["relevancia", "recentes", "antigas"]
 Mes = Literal[
     "",
     "janeiro",

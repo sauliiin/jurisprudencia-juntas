@@ -14,6 +14,7 @@ const state = {
   iaRecurso: "",
   month: "",
   year: "",
+  ordem: "relevancia",
   offset: 0,
   limit: 50,
   total: 0,
@@ -42,6 +43,7 @@ const els = {
   searchMode: document.querySelector("#search-mode"),
   month: document.querySelector("#month-filter"),
   year: document.querySelector("#year-filter"),
+  ordem: document.querySelector("#sort-order"),
   resultCount: document.querySelector("#result-count"),
   results: document.querySelector("#results"),
   paginationBar: document.querySelector("#pagination-bar"),
@@ -189,6 +191,26 @@ function dataDe(record) {
   return data;
 }
 
+// Chave de ordenação (AAAA-MM-DD); sem data, vazia.
+function dataIso(record) {
+  const [dia, mes, ano] = dataDe(record).split("/");
+  return ano ? `${ano}-${mes}-${dia}` : "";
+}
+
+// "Mais recentes"/"Mais antigas" reordenam por data o que a busca achou (sem data, no fim);
+// empates mantêm a ordem de relevância.
+function ordenarPorData(entries) {
+  if (state.ordem === "relevancia") return entries;
+  const sinal = state.ordem === "antigas" ? 1 : -1;
+  return entries
+    .map((entry, posicao) => ({ entry, posicao, data: dataIso(entry.record) }))
+    .sort((a, b) => {
+      if (!a.data || !b.data) return (!a.data - !b.data) || a.posicao - b.posicao;
+      return sinal * a.data.localeCompare(b.data) || a.posicao - b.posicao;
+    })
+    .map(({ entry }) => entry);
+}
+
 function instanciaCurta(record) {
   return (record.decisao_instancia || "").replace(/^Decisão de\s+/i, "") || "Decisão";
 }
@@ -230,7 +252,12 @@ function atualizarNumeros(votos, autos) {
 // A home aparece até a primeira busca (ou filtro); depois, lista e detalhe.
 function atualizarHome() {
   const ativo = Boolean(
-    state.query || state.month || state.year || state.instancia !== "todas" || state.selected
+    state.query ||
+      state.month ||
+      state.year ||
+      state.instancia !== "todas" ||
+      state.ordem !== "relevancia" ||
+      state.selected
   );
   document.body.classList.toggle("tem-busca", ativo);
 }
@@ -560,6 +587,7 @@ function searchUrl(fetchOffset) {
     modo: state.searchMode,
     mes: state.month,
     ano: state.year,
+    ordem: state.ordem,
     limit: String(state.limit),
     offset: String(fetchOffset),
   });
@@ -603,7 +631,7 @@ async function runSearch({ append = false, keepOffset = false } = {}) {
     state.total = data.total;
     state.items = append ? [...state.items, ...data.items.map(decorate)] : data.items.map(decorate);
   } else if (semantic) {
-    const filtered = semanticFiltered;
+    const filtered = ordenarPorData(semanticFiltered);
     state.total = filtered.length;
     // Sem destaque de termos: aqui o que aproxima as decisões é o assunto, não as palavras.
     const pageItems = filtered.slice(fetchOffset, fetchOffset + state.limit).map((entry) => ({
@@ -617,11 +645,13 @@ async function runSearch({ append = false, keepOffset = false } = {}) {
     await loadStaticData();
     const terms = tokenize(state.query);
     const phrase = normalize(state.query).trim();
-    const filtered = state.records
-      .filter((record) => state.instancia === "todas" || record.instancia === state.instancia)
-      .map((record) => ({ record, score: scoreRecord(record, terms, phrase) }))
-      .filter((entry) => entry.score > 0)
-      .sort((a, b) => b.score - a.score || a.record.nome_arquivo.localeCompare(b.record.nome_arquivo, "pt-BR"));
+    const filtered = ordenarPorData(
+      state.records
+        .filter((record) => state.instancia === "todas" || record.instancia === state.instancia)
+        .map((record) => ({ record, score: scoreRecord(record, terms, phrase) }))
+        .filter((entry) => entry.score > 0)
+        .sort((a, b) => b.score - a.score || a.record.nome_arquivo.localeCompare(b.record.nome_arquivo, "pt-BR"))
+    );
       
     state.total = filtered.length;
     
@@ -669,7 +699,7 @@ function renderIaHint() {
     infracao && infracao.probabilidade >= 0.35
       ? ` Infração provável: ${emFrase(infracao.nome)} (${Math.round(infracao.probabilidade * 100)}%).`
       : "";
-  els.iaHint.innerHTML = `${icone("faisca", "icon icon-sm")}<span>Ordenado por proximidade de significado.${escapeHtml(provavel)} <a href="ia.html">Como funciona</a></span>`;
+  els.iaHint.innerHTML = `${icone("faisca", "icon icon-sm")}<span>${state.ordem === "relevancia" ? "Ordenado por proximidade de significado." : "Os mais próximos em significado, por data."}${escapeHtml(provavel)} <a href="ia.html">Como funciona</a></span>`;
 }
 
 function renderResults() {
@@ -996,6 +1026,11 @@ els.month.addEventListener("change", () => {
 
 els.year.addEventListener("change", () => {
   state.year = els.year.value;
+  runSearch();
+});
+
+els.ordem.addEventListener("change", () => {
+  state.ordem = els.ordem.value;
   runSearch();
 });
 

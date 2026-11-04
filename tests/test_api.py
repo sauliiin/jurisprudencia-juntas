@@ -110,6 +110,23 @@ def test_sem_consulta_lista_as_mais_recentes(client: TestClient) -> None:
     assert [item["data"] for item in dados["items"]] == ["2025-04-05", "2025-03-30", "2025-03-20"]
 
 
+def test_sem_consulta_das_mais_antigas(client: TestClient) -> None:
+    datas = [item["data"] for item in client.get("/api/search", params={"ordem": "antigas"}).json()["items"]]
+    assert datas[:3] == ["2024-01-15", "2024-02-02", "2025-03-10"]
+
+
+@pytest.mark.parametrize(("ordem", "esperado"), [("recentes", ["voto2", "voto7", "voto1"]), ("antigas", ["voto1", "voto7", "voto2"])])
+def test_consulta_ordenada_por_data(client: TestClient, ordem: str, esperado: list[str]) -> None:
+    dados = client.get("/api/search", params={"q": "obra sem alvará", "ordem": ordem}).json()
+    assert [item["file_id"] for item in dados["items"]] == esperado
+
+
+def test_ordem_por_data_deixa_sem_data_no_fim(client: TestClient) -> None:
+    for ordem in ("recentes", "antigas"):
+        dados = client.get("/api/search", params={"q": "licença", "modo": "words", "ordem": ordem}).json()
+        assert dados["items"][-1]["data"] is None
+
+
 def test_sem_consulta_com_instancia(client: TestClient) -> None:
     assert client.get("/api/search", params={"instancia": "1a_instancia"}).json()["total"] == 4
 
@@ -155,6 +172,7 @@ def test_respostas_nao_trazem_o_autuado(client: TestClient) -> None:
         {"limit": 0},
         {"offset": -1},
         {"q": "x" * 501},
+        {"ordem": "data"},
     ],
 )
 def test_parametros_invalidos(client: TestClient, params: dict) -> None:

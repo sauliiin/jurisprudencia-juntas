@@ -20,6 +20,7 @@ class ParametrosBusca:
     modo: str = "phrase"
     mes: str = ""
     ano: str = ""
+    ordem: str = "relevancia"
     limit: int = 50
     offset: int = 0
 
@@ -92,8 +93,16 @@ _CAMPOS = """v.file_id, v.nome_arquivo, v.instancia, v.decisao_instancia, v.prot
              v.assunto, v.data, v.resultado, v.drive_file_id_publico"""
 
 
+# Decisões sem data ficam no fim nas duas ordens por data; o empate desce para o ranking.
+_POR_DATA = {"recentes": "v.data IS NULL, v.data DESC", "antigas": "v.data IS NULL, v.data ASC"}
+
+
 def buscar(con: sqlite3.Connection, p: ParametrosBusca) -> dict:
-    """Busca paginada: FTS5 com ranking BM25 ou, sem consulta, as decisões mais recentes."""
+    """Busca paginada: FTS5 com ranking BM25 ou, sem consulta, as decisões mais recentes.
+
+    ordem="recentes" ou "antigas" ordena pela data da decisão em vez da relevância.
+    """
+    por_data = _POR_DATA.get(p.ordem)
     where_instancia = ""
     if p.instancia in {"1a_instancia", "2a_instancia"}:
         where_instancia = " AND v.instancia = ?"
@@ -122,7 +131,7 @@ def buscar(con: sqlite3.Connection, p: ParametrosBusca) -> dict:
                   FROM votos_fts f
                   JOIN votos v ON v.file_id = f.file_id
                  WHERE votos_fts MATCH ?{where_instancia}
-                 ORDER BY rank
+                 ORDER BY {f"{por_data}, rank" if por_data else "rank"}
                  LIMIT ? OFFSET ?
                 """,
                 [match, *filtro, p.limit, p.offset],
@@ -136,7 +145,7 @@ def buscar(con: sqlite3.Connection, p: ParametrosBusca) -> dict:
                 SELECT {_CAMPOS}, substr(v.texto, 1, 420) AS trecho, 0 AS rank
                   FROM votos v
                  WHERE 1=1{where_instancia}
-                 ORDER BY v.data IS NULL, v.data DESC, v.rowid
+                 ORDER BY {por_data or _POR_DATA["recentes"]}, v.rowid
                  LIMIT ? OFFSET ?
                 """,
                 [*filtro, p.limit, p.offset],

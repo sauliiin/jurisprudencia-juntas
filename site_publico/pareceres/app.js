@@ -18,6 +18,7 @@ const IA_SEMELHANTES = 5;
 const state = {
   query: "",
   categoria: "todas",
+  ordem: "relevancia",
   // O padrão vem do HTML: Significado (IA) na legislação, Expressão nos pareceres.
   searchMode: document.querySelector("#search-mode").value,
   modoEfetivo: "phrase",
@@ -41,6 +42,8 @@ const els = {
   input: document.querySelector("#search-input"),
   category: document.querySelector("#category-filter"),
   searchMode: document.querySelector("#search-mode"),
+  // Só os pareceres têm "Ordenar"; a legislação não tem data por documento.
+  ordem: document.querySelector("#sort-order"),
   resultCount: document.querySelector("#result-count"),
   results: document.querySelector("#results"),
   paginationBar: document.querySelector("#pagination-bar"),
@@ -95,6 +98,42 @@ function tituloPublico(record) {
   return [`Ofício ${oficio[1]}`, oficio[2].toUpperCase(), /^\d{4}$/.test(assunto) ? "" : assunto]
     .filter(Boolean)
     .join(" · ");
+}
+
+// Data do parecer: a mais recente citada no texto que não passe da última modificação do
+// arquivo no Drive (os pareceres citam leis e ofícios antigos, então nem a primeira nem a
+// última data do texto servem sempre). Sem data no texto, vale a do Drive. AAAA-MM-DD.
+const DATA_POR_EXTENSO = /\b(\d{1,2})º?\s+de\s+(janeiro|fevereiro|março|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\s+de\s+((?:19|20)\d{2})\b/gi;
+const MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+
+function dataIso(record) {
+  if (record._data !== undefined) return record._data;
+  const limite = (record.modificado_em || "").slice(0, 10);
+  let maior = "";
+  for (const achado of (record.texto || "").matchAll(DATA_POR_EXTENSO)) {
+    const mes = MESES.indexOf(achado[2].toLocaleLowerCase("pt-BR").replace("marco", "março")) + 1;
+    const data = `${achado[3]}-${String(mes).padStart(2, "0")}-${achado[1].padStart(2, "0")}`;
+    if (data > maior && (!limite || data <= limite)) maior = data;
+  }
+  record._data = maior || limite;
+  return record._data;
+}
+
+function dataDe(record) {
+  const [ano, mes, dia] = dataIso(record).split("-");
+  return ano ? `${dia}/${mes}/${ano}` : "";
+}
+
+function ordenarPorData(entries) {
+  if (state.ordem === "relevancia") return entries;
+  const sinal = state.ordem === "antigas" ? 1 : -1;
+  return entries
+    .map((entry, posicao) => ({ entry, posicao, data: dataIso(entry.record) }))
+    .sort((a, b) => {
+      if (!a.data || !b.data) return (!a.data - !b.data) || a.posicao - b.posicao;
+      return sinal * a.data.localeCompare(b.data) || a.posicao - b.posicao;
+    })
+    .map(({ entry }) => entry);
 }
 
 function decorate(record) {
@@ -346,7 +385,7 @@ async function runSearch({ keepOffset = false } = {}) {
     }
   }
   state.modoEfetivo = semantic ? "semantic" : state.searchMode === "semantic" ? "phrase" : state.searchMode;
-  const filtered = semantic
+  const filtered = ordenarPorData(semantic
     ? semanticFiltered
     : state.records
         .filter((record) => state.categoria === "todas" || record.categoria === state.categoria)
@@ -357,7 +396,7 @@ async function runSearch({ keepOffset = false } = {}) {
             b.score - a.score ||
             (a.record.ordem ?? 0) - (b.record.ordem ?? 0) ||
             a.record.nome_arquivo.localeCompare(b.record.nome_arquivo, "pt-BR")
-        );
+        ));
 
   state.total = filtered.length;
   state.items = filtered.slice(state.offset, state.offset + state.limit).map((entry) => ({
@@ -431,6 +470,7 @@ function renderResults() {
       // Na legislação a categoria é a norma; o chip "raiz" só repetiria a pasta única.
       const semPasta = item.categoria === "Raiz" ? '<span class="chip">raiz</span>' : "";
       const extras = [
+        els.ordem ? dataDe(item) : "",
         item.ocr ? "OCR" : "",
         item.revogado ? "redação revogada" : "",
         item.ia_similaridade ? `similaridade ${Math.round(item.ia_similaridade * 100)}%` : "",
@@ -633,6 +673,11 @@ els.category.addEventListener("change", () => {
 
 els.searchMode.addEventListener("change", () => {
   state.searchMode = els.searchMode.value;
+  runSearch();
+});
+
+els.ordem?.addEventListener("change", () => {
+  state.ordem = els.ordem.value;
   runSearch();
 });
 

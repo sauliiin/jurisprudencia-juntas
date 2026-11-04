@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse
 
 from api.config import Settings, get_settings
 from api.db import Db
-from api.schemas import Erro, Instancia, Mes, ModoBusca, ResultadoBusca, Stats, Voto
+from api.schemas import Erro, Instancia, Mes, ModoBusca, Ordem, ResultadoBusca, Stats, Voto
 from api.services import busca
 
 router = APIRouter(prefix="/api", tags=["acervo"])
@@ -32,11 +32,14 @@ def search(
     modo: Annotated[ModoBusca, Query(description="phrase: expressão exata; words: todas as palavras.")] = "phrase",
     mes: Annotated[Mes, Query(description="Mês da decisão (exige ano).")] = "",
     ano: Annotated[str, Query(pattern=r"^(\d{4})?$", description="Ano da decisão.")] = "",
+    ordem: Annotated[
+        Ordem, Query(description="relevancia; recentes ou antigas: pela data da decisão (sem data, no fim).")
+    ] = "relevancia",
     limit: Annotated[int, Query(ge=1, description="Resultados por página (acima do máximo, usa o máximo).")] = 50,
     offset: Annotated[int, Query(ge=0, le=1_000_000)] = 0,
 ) -> dict:
     parametros = busca.ParametrosBusca(
-        q=q, instancia=instancia, modo=modo, mes=mes, ano=ano, limit=min(limit, settings.max_limit), offset=offset
+        q=q, instancia=instancia, modo=modo, mes=mes, ano=ano, ordem=ordem, limit=min(limit, settings.max_limit), offset=offset
     )
     return busca.buscar(db, parametros)
 
