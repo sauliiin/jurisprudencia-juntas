@@ -1,6 +1,7 @@
 # OmniAI · Jurisprudência
 
 [![CI](https://github.com/sauliiin/jurisprudencia-juntas/actions/workflows/ci.yml/badge.svg)](https://github.com/sauliiin/jurisprudencia-juntas/actions/workflows/ci.yml)
+[![Deploy AWS](https://github.com/sauliiin/jurisprudencia-juntas/actions/workflows/deploy-aws.yml/badge.svg)](https://github.com/sauliiin/jurisprudencia-juntas/actions/workflows/deploy-aws.yml)
 [![Cobertura](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/sauliiin/jurisprudencia-juntas/badges/coverage.json)](https://github.com/sauliiin/jurisprudencia-juntas/actions/workflows/ci.yml)
 ![Python 3.12](https://img.shields.io/badge/python-3.12-3776ab)
 ![FastAPI](https://img.shields.io/badge/FastAPI-009688)
@@ -14,12 +15,15 @@
 > check, Docker) serves search, and a dependency-free web front end runs a **neural model trained
 > from scratch in the browser** for semantic search and similar cases (86% infraction accuracy,
 > 81% precision@5 on held-out data). Tested with pytest (99% coverage), linted with ruff, built and
-> smoke-tested in GitHub Actions. Next step: deployment on AWS and answers generated with Bedrock.
+> smoke-tested in GitHub Actions. Deployed serverless on AWS (CloudFront, private S3 with OAC, API Gateway,
+> Lambda on Graviton, Route 53, ACM) with CloudFormation/SAM and keyless GitHub Actions deploys via OIDC.
+> Next step: answers generated with Bedrock.
 
 ![Tela inicial do OmniAI · Jurisprudência](docs/screenshots/depois/desktop-inicial.png)
 
-**Site:** [sauliiin.github.io/jurisprudencia-juntas](https://sauliiin.github.io/jurisprudencia-juntas/)
-(modo estático, no GitHub Pages) · domínio futuro: `juris.omniai.com.br`
+**Site:** [omniailab.com.br](https://omniailab.com.br) (AWS serverless: CloudFront, S3, API Gateway e Lambda,
+[detalhes](docs/aws.md)) · espelho estático no
+[GitHub Pages](https://sauliiin.github.io/jurisprudencia-juntas/)
 
 ## O que é
 
@@ -224,10 +228,9 @@ texto não são mascarados, e o botão "Abrir documento" leva ao arquivo origina
 
 ## Roadmap
 
-1. **AWS:** API em contêiner no **EC2** atrás de um **Application Load Balancer**, com **Auto Scaling**;
-   índice migrado para **RDS** (PostgreSQL, busca textual e `pgvector`); cache de buscas frequentes no
-   **ElastiCache** (Redis); site, modelo da IA e documentos no **S3** (com CloudFront); domínio
-   `juris.omniai.com.br` no **Route 53**.
+1. **AWS: feito.** Site e API em produção, serverless, seguindo o AWS Well-Architected Framework; veja
+   [docs/aws.md](docs/aws.md). Próximo passo de infraestrutura: índice em imagem de contêiner ou EFS quando
+   passar do limite do pacote do Lambda.
 2. **Respostas com IA citando as decisões:** perguntas em linguagem natural respondidas por um modelo no
    **Amazon Bedrock** a partir das decisões recuperadas pela busca, sempre com a citação de cada uma.
 3. Mascarar também CPF/CNPJ e nomes de terceiros no acervo publicado.
@@ -235,7 +238,8 @@ texto não são mascarados, e o botão "Abrir documento" leva ao arquivo origina
 ## Estrutura
 
 ```text
-api/                  API FastAPI (rotas, serviço de busca, schemas, config, gerador do índice)
+api/                  API FastAPI (rotas, serviço de busca, schemas, config, gerador do índice, entrada do Lambda)
+infra/aws/            infraestrutura como código (CloudFormation/SAM) e build do pacote do Lambda
 tests/                testes da API (pytest)
 site_publico/         site: busca, detalhe, páginas Sobre e IA, pareceres e legislação
 site_data/            acervo público (JSONL) e modelo da IA (versionados)
