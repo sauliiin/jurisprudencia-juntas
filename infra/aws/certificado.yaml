@@ -1,0 +1,28 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  OmniAI Jurisprudencia - certificado TLS do CloudFront. Precisa ficar em us-east-1
+  (exigencia do CloudFront); validado por DNS automaticamente na zona do Route 53.
+
+Parameters:
+  DomainName:
+    Type: String
+    Default: omniailab.com.br
+  HostedZoneId:
+    Type: AWS::Route53::HostedZone::Id
+
+Resources:
+  Certificate:
+    Type: AWS::CertificateManager::Certificate
+    Properties:
+      DomainName: !Ref DomainName
+      SubjectAlternativeNames: [!Sub "www.${DomainName}"]
+      ValidationMethod: DNS
+      DomainValidationOptions:
+        - DomainName: !Ref DomainName
+          HostedZoneId: !Ref HostedZoneId
+        - DomainName: !Sub "www.${DomainName}"
+          HostedZoneId: !Ref HostedZoneId
+
+Outputs:
+  CertificateArn:
+    Value: !Ref Certificate

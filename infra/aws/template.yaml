@@ -1,0 +1,320 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: >-
+  OmniAI Jurisprudencia - site no S3 privado atras do CloudFront (OAC) e API FastAPI no
+  Lambda (arm64) atras do API Gateway HTTP API. Regiao: sa-east-1. Publicado pelo
+  GitHub Actions (.github/workflows/deploy-aws.yml).
+
+Parameters:
+  DomainName:
+    Type: String
+    Default: omniailab.com.br
+  HostedZoneId:
+    Type: AWS::Route53::HostedZone::Id
+  CertificateArn:
+    Type: String
+    Description: Certificado do ACM em us-east-1 (stack omniailab-certificado).
+  AlertEmail:
+    Type: String
+    Default: ""
+    Description: E-mail para os alarmes do CloudWatch (vazio = sem alarme por e-mail).
+
+Conditions:
+  ComEmail: !Not [!Equals [!Ref AlertEmail, ""]]
+
+Globals:
+  Function:
+    Runtime: python3.12
+    Architectures: [arm64]
+
+Resources:
+  # ---------- Site estatico ----------
+  SiteBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub omniailab-site-${AWS::AccountId}
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules: [{ObjectOwnership: BucketOwnerEnforced}]
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault: {SSEAlgorithm: AES256}
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: versoes-antigas-30-dias
+            Status: Enabled
+            NoncurrentVersionExpiration: {NoncurrentDays: 30}
+
+  SiteBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref SiteBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: SoOCloudFrontLe
+            Effect: Allow
+            Principal: {Service: cloudfront.amazonaws.com}
+            Action: s3:GetObject
+            Resource: !Sub ${SiteBucket.Arn}/*
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub arn:aws:cloudfront::${AWS::AccountId}:distribution/${Distribution}
+          - Sid: SoHttps
+            Effect: Deny
+            Principal: "*"
+            Action: s3:*
+            Resource: [!GetAtt SiteBucket.Arn, !Sub "${SiteBucket.Arn}/*"]
+            Condition:
+              Bool: {aws:SecureTransport: "false"}
+
+  OriginAccessControl:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub omniailab-oac-${AWS::AccountId}
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  # www -> dominio principal; "/pasta" -> "/pasta/"; "/pasta/" -> "/pasta/index.html".
+  RewriteFunction:
+    Type: AWS::CloudFront::Function
+    Properties:
+      Name: omniailab-rotas
+      AutoPublish: true
+      FunctionConfig:
+        Comment: Redireciona www, completa index.html
+        Runtime: cloudfront-js-2.0
+      FunctionCode: !Sub |
+        function handler(event) {
+          var req = event.request;
+          var host = req.headers.host ? req.headers.host.value : "";
+          var qs = Object.keys(req.querystring).map(function (k) {
+            var v = req.querystring[k];
+            return v.value === "" ? k : k + "=" + v.value;
+          }).join("&");
+          if (host.indexOf("www.") === 0) {
+            return { statusCode: 301, statusDescription: "Moved Permanently",
+              headers: { location: { value: "https://${DomainName}" + req.uri + (qs ? "?" + qs : "") } } };
+          }
+          var ultimo = req.uri.split("/").pop();
+          if (req.uri.endsWith("/")) {
+            req.uri += "index.html";
+          } else if (ultimo.indexOf(".") === -1) {
+            return { statusCode: 301, statusDescription: "Moved Permanently",
+              headers: { location: { value: req.uri + "/" + (qs ? "?" + qs : "") } } };
+          }
+          return req;
+        }
+
+  # ---------- API ----------
+  HttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      Description: API de busca do acervo (FastAPI no Lambda)
+      DefaultRouteSettings:
+        ThrottlingRateLimit: 20
+        ThrottlingBurstLimit: 40
+
+  ApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: omniailab-api
+      Description: FastAPI + SQLite FTS5 (indice publico mascarado, somente leitura)
+      CodeUri: ../../build/lambda/
+      Handler: api.lambda_handler.handler
+      MemorySize: 1024
+      Timeout: 10
+      Environment:
+        Variables:
+          JURIS_INDICE: /var/task/indice_publico.db
+          JURIS_SERVIR_SITE: "false"
+          JURIS_LOG_LEVEL: INFO
+      LoggingConfig:
+        LogGroup: !Ref ApiLogGroup
+      Events:
+        Api:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /api/{proxy+}
+            Method: GET
+        Health:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /health
+            Method: GET
+        Docs:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /docs
+            Method: GET
+        OpenApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /openapi.json
+            Method: GET
+
+  ApiLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/lambda/omniailab-api
+      RetentionInDays: 30
+
+  # ---------- CloudFront ----------
+  Distribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Comment: OmniAI Jurisprudencia
+        Enabled: true
+        Aliases: [!Ref DomainName, !Sub "www.${DomainName}"]
+        DefaultRootObject: index.html
+        HttpVersion: http2and3
+        IPV6Enabled: true
+        PriceClass: PriceClass_All # inclui os pontos de presenca da America do Sul
+        ViewerCertificate:
+          AcmCertificateArn: !Ref CertificateArn
+          SslSupportMethod: sni-only
+          MinimumProtocolVersion: TLSv1.2_2021
+        Origins:
+          - Id: site-s3
+            DomainName: !GetAtt SiteBucket.RegionalDomainName
+            OriginAccessControlId: !GetAtt OriginAccessControl.Id
+            S3OriginConfig: {OriginAccessIdentity: ""}
+          - Id: api
+            DomainName: !Sub ${HttpApi}.execute-api.${AWS::Region}.amazonaws.com
+            CustomOriginConfig:
+              OriginProtocolPolicy: https-only
+              OriginSSLProtocols: [TLSv1.2]
+        DefaultCacheBehavior:
+          TargetOriginId: site-s3
+          ViewerProtocolPolicy: redirect-to-https
+          Compress: true
+          AllowedMethods: [GET, HEAD]
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6 # CachingOptimized
+          ResponseHeadersPolicyId: 67f7725c-6f97-4210-82d7-5512b31e9d03 # SecurityHeadersPolicy
+          FunctionAssociations:
+            - EventType: viewer-request
+              FunctionARN: !GetAtt RewriteFunction.FunctionMetadata.FunctionARN
+        CacheBehaviors:
+          - PathPattern: /api/*
+            TargetOriginId: api
+            ViewerProtocolPolicy: https-only
+            Compress: true
+            AllowedMethods: [GET, HEAD, OPTIONS]
+            CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad # CachingDisabled
+            OriginRequestPolicyId: b689b0a8-53d0-40ab-baf2-68738e2966ac # AllViewerExceptHostHeader
+            ResponseHeadersPolicyId: 67f7725c-6f97-4210-82d7-5512b31e9d03
+          - PathPattern: /health
+            TargetOriginId: api
+            ViewerProtocolPolicy: https-only
+            AllowedMethods: [GET, HEAD]
+            CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+            OriginRequestPolicyId: b689b0a8-53d0-40ab-baf2-68738e2966ac
+          - PathPattern: /docs
+            TargetOriginId: api
+            ViewerProtocolPolicy: https-only
+            AllowedMethods: [GET, HEAD]
+            CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+            OriginRequestPolicyId: b689b0a8-53d0-40ab-baf2-68738e2966ac
+          - PathPattern: /openapi.json
+            TargetOriginId: api
+            ViewerProtocolPolicy: https-only
+            AllowedMethods: [GET, HEAD]
+            CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+            OriginRequestPolicyId: b689b0a8-53d0-40ab-baf2-68738e2966ac
+
+  # ---------- DNS ----------
+  RecordApexA:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Ref DomainName
+      Type: A
+      AliasTarget: {DNSName: !GetAtt Distribution.DomainName, HostedZoneId: Z2FDTNDATAQYW2}
+  RecordApexAAAA:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Ref DomainName
+      Type: AAAA
+      AliasTarget: {DNSName: !GetAtt Distribution.DomainName, HostedZoneId: Z2FDTNDATAQYW2}
+  RecordWwwA:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Sub www.${DomainName}
+      Type: A
+      AliasTarget: {DNSName: !GetAtt Distribution.DomainName, HostedZoneId: Z2FDTNDATAQYW2}
+  RecordWwwAAAA:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Sub www.${DomainName}
+      Type: AAAA
+      AliasTarget: {DNSName: !GetAtt Distribution.DomainName, HostedZoneId: Z2FDTNDATAQYW2}
+
+  # ---------- Alarmes ----------
+  AlertTopic:
+    Type: AWS::SNS::Topic
+    Condition: ComEmail
+    Properties:
+      TopicName: omniailab-alertas
+      Subscription: [{Protocol: email, Endpoint: !Ref AlertEmail}]
+
+  ApiErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: ComEmail
+    Properties:
+      AlarmName: omniailab-api-erros
+      AlarmDescription: A funcao da API lancou erros
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions: [{Name: FunctionName, Value: !Ref ApiFunction}]
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlertTopic]
+
+  Api5xxAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: ComEmail
+    Properties:
+      AlarmName: omniailab-api-5xx
+      AlarmDescription: Respostas 5xx no API Gateway
+      Namespace: AWS/ApiGateway
+      MetricName: 5xx
+      Dimensions: [{Name: ApiId, Value: !Ref HttpApi}]
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 5
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlertTopic]
+
+Outputs:
+  SiteBucketName:
+    Value: !Ref SiteBucket
+  DistributionId:
+    Value: !Ref Distribution
+  DistributionDomain:
+    Value: !GetAtt Distribution.DomainName
+  ApiEndpoint:
+    Value: !Sub https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com
+  SiteUrl:
+    Value: !Sub https://${DomainName}

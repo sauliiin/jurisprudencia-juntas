@@ -1,0 +1,5 @@
+# Dependências da API no Lambda: as mesmas da API, sem o uvicorn, mais o adaptador Mangum.
+fastapi==0.162.0
+pydantic==2.14.1
+pydantic-settings==2.16.1
+mangum==0.22.0

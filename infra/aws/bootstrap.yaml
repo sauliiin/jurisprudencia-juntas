@@ -1,0 +1,188 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  OmniAI Jurisprudencia - bootstrap (criado uma vez, pelo console, em sa-east-1).
+  Zona DNS do dominio, bucket de artefatos, confianca OIDC com o GitHub Actions,
+  role de deploy com permissoes restritas ao projeto e orcamento mensal com alerta.
+
+Parameters:
+  DomainName:
+    Type: String
+    Default: omniailab.com.br
+  GitHubRepo:
+    Type: String
+    Default: sauliiin/jurisprudencia-juntas
+    Description: owner/repositorio autorizado a fazer deploy (so o branch main).
+  CreateOidcProvider:
+    Type: String
+    Default: "true"
+    AllowedValues: ["true", "false"]
+    Description: false se a conta ja tiver o provedor token.actions.githubusercontent.com.
+  BudgetEmail:
+    Type: String
+    Description: E-mail que recebe o alerta do orcamento.
+  MonthlyBudgetUsd:
+    Type: Number
+    Default: 5
+
+Conditions:
+  CriarOidc: !Equals [!Ref CreateOidcProvider, "true"]
+
+Resources:
+  HostedZone:
+    Type: AWS::Route53::HostedZone
+    Properties:
+      Name: !Ref DomainName
+      HostedZoneConfig:
+        Comment: OmniAI Jurisprudencia
+
+  ArtifactBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub omniailab-artefatos-${AWS::AccountId}
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules: [{ObjectOwnership: BucketOwnerEnforced}]
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault: {SSEAlgorithm: AES256}
+      LifecycleConfiguration:
+        Rules:
+          - Id: apaga-pacotes-antigos
+            Status: Enabled
+            ExpirationInDays: 30
+
+  GitHubOidcProvider:
+    Type: AWS::IAM::OIDCProvider
+    Condition: CriarOidc
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList: [sts.amazonaws.com]
+
+  DeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: omniailab-github-deploy
+      Description: Assumida pelo GitHub Actions (OIDC) para publicar o site e a API.
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !Sub arn:aws:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+                token.actions.githubusercontent.com:sub: !Sub repo:${GitHubRepo}:ref:refs/heads/main
+      Policies:
+        - PolicyName: deploy-omniailab
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: CloudFormationDoProjeto
+                Effect: Allow
+                Action: cloudformation:*
+                Resource:
+                  - !Sub arn:aws:cloudformation:*:${AWS::AccountId}:stack/omniailab-*/*
+                  - arn:aws:cloudformation:*:aws:transform/Serverless-2016-10-31
+              - Sid: CloudFormationLeitura
+                Effect: Allow
+                Action:
+                  - cloudformation:ValidateTemplate
+                  - cloudformation:ListStacks
+                  - cloudformation:GetTemplateSummary
+                Resource: "*"
+              - Sid: BucketsDoProjeto
+                Effect: Allow
+                Action: s3:*
+                Resource:
+                  - arn:aws:s3:::omniailab-*
+                  - arn:aws:s3:::omniailab-*/*
+              - Sid: LambdaDoProjeto
+                Effect: Allow
+                Action: lambda:*
+                Resource: !Sub arn:aws:lambda:*:${AWS::AccountId}:function:omniailab-*
+              - Sid: RolesDoProjeto
+                Effect: Allow
+                Action:
+                  - iam:CreateRole
+                  - iam:DeleteRole
+                  - iam:GetRole
+                  - iam:TagRole
+                  - iam:UntagRole
+                  - iam:UpdateRole
+                  - iam:UpdateAssumeRolePolicy
+                  - iam:PutRolePolicy
+                  - iam:GetRolePolicy
+                  - iam:DeleteRolePolicy
+                  - iam:AttachRolePolicy
+                  - iam:DetachRolePolicy
+                  - iam:ListRolePolicies
+                  - iam:ListAttachedRolePolicies
+                  - iam:PassRole
+                Resource: !Sub arn:aws:iam::${AWS::AccountId}:role/omniailab-*
+              - Sid: DnsDaZona
+                Effect: Allow
+                Action:
+                  - route53:ChangeResourceRecordSets
+                  - route53:ListResourceRecordSets
+                  - route53:GetHostedZone
+                Resource: !Sub arn:aws:route53:::hostedzone/${HostedZone.Id}
+              - Sid: DnsLeitura
+                Effect: Allow
+                Action:
+                  - route53:GetChange
+                  - route53:ListHostedZones
+                  - route53:ListHostedZonesByName
+                Resource: "*"
+              - Sid: BordaEApi
+                Effect: Allow
+                Action:
+                  - cloudfront:*
+                  - apigateway:*
+                  - acm:*
+                  - logs:*
+                  - cloudwatch:*
+                  - sns:*
+                Resource: "*"
+
+  MonthlyBudget:
+    Type: AWS::Budgets::Budget
+    Properties:
+      Budget:
+        BudgetName: omniailab-mensal
+        BudgetType: COST
+        TimeUnit: MONTHLY
+        BudgetLimit:
+          Amount: !Ref MonthlyBudgetUsd
+          Unit: USD
+      NotificationsWithSubscribers:
+        - Notification:
+            NotificationType: ACTUAL
+            ComparisonOperator: GREATER_THAN
+            Threshold: 80
+          Subscribers: [{SubscriptionType: EMAIL, Address: !Ref BudgetEmail}]
+        - Notification:
+            NotificationType: FORECASTED
+            ComparisonOperator: GREATER_THAN
+            Threshold: 100
+          Subscribers: [{SubscriptionType: EMAIL, Address: !Ref BudgetEmail}]
+
+Outputs:
+  HostedZoneId:
+    Value: !Ref HostedZone
+    Description: Variavel HOSTED_ZONE_ID do repositorio.
+  NameServers:
+    Value: !Join [", ", !GetAtt HostedZone.NameServers]
+    Description: Colocar estes 4 nameservers no registrador do dominio (Hostinger).
+  ArtifactBucketName:
+    Value: !Ref ArtifactBucket
+    Description: Variavel ARTIFACT_BUCKET do repositorio.
+  DeployRoleArn:
+    Value: !GetAtt DeployRole.Arn
+    Description: Variavel AWS_ROLE_ARN do repositorio.
