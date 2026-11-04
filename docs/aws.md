@@ -27,7 +27,7 @@ flowchart LR
 | Excelência operacional | Toda a infraestrutura em CloudFormation/SAM; deploy, invalidação de cache e smoke test automáticos; logs JSON com `request_id` no CloudWatch |
 | Segurança | Bucket com Block Public Access, lido só pelo CloudFront via OAC e só por TLS; TLS 1.2+; `SecurityHeadersPolicy` (HSTS etc.); deploy por OIDC sem chaves de acesso, role restrita a recursos `omniailab-*` e ao branch `main`; Lambda só lê o índice público já mascarado |
 | Confiabilidade | Serviços gerenciados e multi-AZ (S3, Lambda, API Gateway); versionamento do bucket; o site cai para o modo estático se a API não responder |
-| Eficiência de performance | Cache no CloudFront (inclusive pontos de presença no Brasil, `PriceClass_All`); HTTP/3; acervos enviados já em gzip (o CloudFront só comprime arquivos de até 10 MB): `votos.jsonl` cai de 66 MB para ~14 MB; Lambda de 1 GB com o índice no próprio pacote, sem rede até o banco |
+| Eficiência de performance | Cache no CloudFront (inclusive pontos de presença no Brasil, `PriceClass_All`); HTTP/3; acervos enviados já em gzip (o CloudFront só comprime arquivos de até 10 MB): `votos.jsonl` cai de 66 MB para ~16 MB; Lambda de 1 GB com o índice no próprio pacote, sem rede até o banco |
 | Otimização de custos | Sem servidor ligado: paga por requisição; HTTP API (mais barata que REST API); Lambda arm64 (Graviton); SQLite no pacote em vez de RDS; orçamento de US$ 5 com alerta |
 | Sustentabilidade | Nada ocioso; Graviton; cache e compressão reduzem tráfego e chamadas à origem |
 
