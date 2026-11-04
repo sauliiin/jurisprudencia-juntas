@@ -47,6 +47,13 @@ no Lambda (até 10 GB) ou EFS.
 4. Rodar o workflow **Deploy AWS** (ou dar push no `main`). Ele cria o certificado, o stack do app, envia o
    site e testa `/health` e `/api/search` no domínio.
 
+Para publicar à mão (por exemplo no AWS CloudShell, com Python 3.12), com as mesmas variáveis exportadas:
+
+```bash
+pip install -r requirements-api.txt && python -m api.indice
+bash infra/aws/build_lambda.sh && bash infra/aws/deploy.sh
+```
+
 ## Custos aproximados
 
 Com tráfego de portfólio: US$ 0,50 da zona do Route 53 mais centavos de S3, API Gateway e Lambda; CloudFront,
