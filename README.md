@@ -22,7 +22,7 @@
 ![Tela inicial do OmniAI · Jurisprudência](docs/screenshots/depois/desktop-inicial.png)
 
 **Site:** [omniailab.com.br](https://omniailab.com.br) (AWS serverless: CloudFront, S3, API Gateway e Lambda,
-[detalhes](docs/aws.md)) · espelho estático no
+[detalhes](#na-aws)) · espelho estático no
 [GitHub Pages](https://sauliiin.github.io/jurisprudencia-juntas/)
 
 ## O que é
@@ -113,6 +113,137 @@ flowchart LR
   por ambiente e o site servido no mesmo processo.
 - **Site** ([site_publico/](site_publico/)): sem framework e sem build; se a API não responder, cai para o
   modo estático.
+
+## Na AWS
+
+O site e a API rodam em **https://omniailab.com.br** numa arquitetura **100% serverless** na região
+**sa-east-1 (São Paulo)**, desenhada pelos seis pilares do **AWS Well-Architected Framework**. Toda a
+infraestrutura é código ([`infra/aws/`](infra/aws/)) e cada push no `main` publica sozinho, sem chaves de
+acesso guardadas no GitHub.
+
+| Em números | |
+| --- | --- |
+| Servidores ligados | 0 (paga só por requisição) |
+| Serviços AWS | 11: Route 53, ACM, CloudFront, S3, API Gateway, Lambda, IAM, CloudFormation, CloudWatch, SNS, Budgets |
+| Stacks CloudFormation | 3 (bootstrap, certificado, aplicação) |
+| Download do acervo no modo estático | 16 MB em vez de 66 MB (gzip prévio) |
+| Custo esperado | ~US$ 1/mês com tráfego baixo |
+
+### Arquitetura
+
+```mermaid
+flowchart LR
+    user([Usuário]) -- "1 · DNS" --> r53[Route 53<br/>zona omniailab.com.br]
+    user -- "2 · HTTPS" --> cf
+
+    subgraph edge["Borda (global)"]
+        cf[CloudFront<br/>certificado ACM · TLS 1.2+ · HTTP/3<br/>headers de segurança]
+        fn[CloudFront Function<br/>www → apex · index.html]
+        cf --- fn
+    end
+
+    subgraph sp["sa-east-1 (São Paulo)"]
+        s3[(S3 privado<br/>site e acervos)]
+        apigw[API Gateway<br/>HTTP API · throttling]
+        lambda[Lambda arm64<br/>FastAPI + SQLite FTS5]
+        cw[CloudWatch<br/>logs · alarmes] --> sns[SNS<br/>e-mail]
+    end
+
+    cf -- "/*  via OAC" --> s3
+    cf -- "/api/*  /health  /docs" --> apigw --> lambda
+    lambda --> cw
+
+    gh[GitHub Actions] -- "OIDC (sem chaves)" --> cfn[CloudFormation] -.-> cf & s3 & lambda
+```
+
+### Caminho de uma busca
+
+1. O navegador resolve `omniailab.com.br` no **Route 53**, que responde com um registro *alias* (A e AAAA)
+   para a distribuição do CloudFront.
+2. O **CloudFront** encerra o HTTPS na borda mais próxima (há pontos de presença no Brasil) com o
+   certificado do **ACM**.
+3. Páginas, scripts e acervos (`/*`) vêm do cache da borda. Se não estiverem lá, o CloudFront busca no
+   **S3**, assinando o pedido com **OAC** (Origin Access Control). O bucket não aceita nenhum outro acesso.
+4. A busca (`/api/search`) segue para o **API Gateway**, que limita a taxa de requisições e chama o
+   **Lambda**. A função roda a mesma API FastAPI do Docker e consulta o índice SQLite FTS5 empacotado com
+   ela, sem ir à rede atrás de um banco.
+5. A IA de busca por significado não passa pelo servidor: o modelo vai para o navegador e roda lá.
+
+### Serviços e por que cada um
+
+| Serviço | Papel | Por que este |
+| --- | --- | --- |
+| **Route 53** | DNS do domínio | Registro *alias* no apex (CNAME não pode no apex) e validação automática do certificado |
+| **ACM** | Certificado TLS | Gratuito, renova sozinho; criado em **us-east-1**, a única região que o CloudFront aceita |
+| **CloudFront** | CDN e porta única de entrada | Cache perto do usuário, HTTPS, HTTP/3 e IPv6; site e API no mesmo domínio, sem CORS |
+| **CloudFront Functions** | Regras na borda | Redireciona `www` e completa `index.html` em menos de 1 ms, mais barato que Lambda@Edge |
+| **S3** | Site estático e acervos | Durabilidade de 11 noves, privado com OAC (sucessor do OAI) |
+| **API Gateway (HTTP API)** | Entrada da API | Mais barata e com menos latência que a REST API; throttling de 20 req/s (pico de 40) |
+| **Lambda (arm64)** | API FastAPI | Escala de 0 a N sozinha; Graviton custa menos e gasta menos energia que x86 |
+| **CloudFormation / SAM** | Infraestrutura como código | Ambiente reproduzível e versionado; SAM simplifica Lambda e API Gateway |
+| **IAM + OIDC** | Identidade do deploy | O GitHub recebe credenciais temporárias; nada de access key de longa duração |
+| **CloudWatch + SNS** | Logs e alarmes | Logs JSON com `request_id`, retidos 30 dias; alarmes vão por e-mail |
+| **Budgets** | Controle de custo | Alerta em 80% do gasto real e 100% do previsto, com teto de US$ 5/mês |
+
+### Os seis pilares do Well-Architected
+
+| Pilar | O que foi feito |
+| --- | --- |
+| **Excelência operacional** | Infraestrutura 100% em código; deploy, invalidação de cache e *smoke test* automáticos a cada push; logs estruturados com `request_id` de ponta a ponta |
+| **Segurança** | Defesa em camadas (detalhes abaixo); menor privilégio em todas as identidades; dados pessoais mascarados antes de qualquer publicação |
+| **Confiabilidade** | Só serviços gerenciados e multi-AZ; versionamento do bucket (volta a qualquer versão em 30 dias); se a API falhar, o site cai sozinho para o modo estático e continua buscando |
+| **Eficiência de performance** | Cache na borda; HTTP/3; acervos comprimidos antes do envio (o CloudFront só comprime arquivos de até 10 MB); índice dentro do pacote do Lambda, sem rede até o banco |
+| **Otimização de custos** | Nada ligado sem uso; HTTP API em vez de REST API; Graviton; SQLite em vez de RDS (sem custo fixo); orçamento com alerta |
+| **Sustentabilidade** | Zero recursos ociosos; Graviton; cache e compressão reduzem bytes trafegados e chamadas à origem |
+
+### Segurança em camadas
+
+- **Rede e borda:** só HTTPS (HTTP redireciona), TLS 1.2 ou superior, `SecurityHeadersPolicy` (HSTS,
+  `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`).
+- **Armazenamento:** Block Public Access ligado, ACLs desativadas (`BucketOwnerEnforced`), criptografia
+  SSE-S3, política que libera leitura só para **esta** distribuição (`aws:SourceArn`) e nega qualquer acesso
+  sem TLS. Abrir a URL do bucket direto devolve 403.
+- **Identidades:** a role de deploy só pode ser assumida pelo branch `main` deste repositório (condição
+  `sub` do token OIDC) e só mexe em recursos com prefixo `omniailab-*`. A função Lambda não tem permissão
+  para nenhum outro serviço além dos próprios logs.
+- **Dados:** a API lê só o índice público, gerado do acervo já mascarado, em modo somente leitura.
+- **Abuso e custo:** throttling no API Gateway e alarme de orçamento.
+
+### Infraestrutura como código
+
+| Stack | Região | O que cria | Quem aplica |
+| --- | --- | --- | --- |
+| [`omniailab-bootstrap`](infra/aws/bootstrap.yaml) | sa-east-1 | Zona do Route 53, bucket de artefatos, provedor OIDC, role de deploy, orçamento | Console, uma vez |
+| [`omniailab-certificado`](infra/aws/certificado.yaml) | us-east-1 | Certificado ACM com validação DNS automática | GitHub Actions |
+| [`omniailab-app`](infra/aws/template.yaml) | sa-east-1 | S3, OAC, CloudFront, CloudFront Function, HTTP API, Lambda, registros DNS, logs e alarmes | GitHub Actions |
+
+### Deploy contínuo
+
+O workflow [`deploy-aws.yml`](.github/workflows/deploy-aws.yml) roda a cada push no `main` que toque o site, a
+API, os acervos ou a infraestrutura:
+
+1. Gera o índice público a partir do acervo mascarado.
+2. Monta o pacote do Lambda para arm64 ([`build_lambda.sh`](infra/aws/build_lambda.sh)): código, dependências
+   e índice, ~183 MB de 250 MB permitidos.
+3. Assume a role da AWS por **OIDC**.
+4. Aplica o stack do certificado e o da aplicação (CloudFormation *change sets*: só o que mudou é alterado).
+5. Envia o site ao S3 com `Cache-Control` adequado e os acervos já em gzip.
+6. Invalida o cache do CloudFront.
+7. Faz o *smoke test* no domínio: `/health`, a página inicial e uma busca real.
+
+### Decisões e alternativas descartadas
+
+| Decisão | Alternativa | Por quê |
+| --- | --- | --- |
+| Lambda + API Gateway | EC2 + ALB + Auto Scaling | Tráfego baixo e irregular: o ALB sozinho custaria mais que toda a solução |
+| SQLite FTS5 dentro do pacote | RDS PostgreSQL ou OpenSearch | Índice somente leitura, trocado a cada deploy; busca BM25 em milissegundos sem custo fixo de banco |
+| HTTP API | REST API | Mais barata e mais rápida; os recursos extras da REST API (chaves de uso, transformações) não são usados |
+| OAC | OAI ou bucket público | OAC é o mecanismo atual e assina com SigV4; bucket público expõe os arquivos fora do CDN |
+| CloudFront Function | Lambda@Edge | Regras simples de URL não precisam de Lambda@Edge, que é mais cara e mais lenta |
+| Uma região (sa-east-1) | Multirregião | A borda do CloudFront já é global; a confiabilidade multi-AZ basta para o caso de uso |
+
+Quando o índice passar do limite do pacote, o próximo passo é publicar a função como imagem de contêiner (até
+10 GB) ou montar o índice via EFS. Reproduzir em outra conta e estimativa de custos: [docs/aws.md](docs/aws.md).
 
 ## Como rodar
 
