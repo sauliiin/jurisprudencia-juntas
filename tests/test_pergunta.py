@@ -198,7 +198,7 @@ def test_cli_baixa_do_drive(drive, tmp_path: Path, capsys) -> None:
     entendimento.main(["--drive-id", "abc", "--saida", str(saida)])
     doc = json.loads(saida.read_text(encoding="utf-8"))
     assert doc["arquivo"] == "ENTENDIMENTO JUNTAS 2026 - versão final.docx"
-    assert doc["link"] == "https://drive.google.com/file/d/abc/view"
+    assert doc["link"] == f"https://drive.google.com/file/d/{entendimento.PDF_ID}/view"  # o PDF, não o .docx
     assert doc["modificado_em"] == "2026-11-05T15:21:22Z"  # a data do Drive vale mais que a do arquivo
     assert doc["topicos"][1]["titulo"].startswith("CAPÍTULO III")
     assert "7 tópicos" in capsys.readouterr().out

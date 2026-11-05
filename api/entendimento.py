@@ -27,7 +27,9 @@ from pathlib import Path
 from api import __version__
 
 # "ENTENDIMENTO JUNTAS 2026 - versão final.docx", compartilhado para qualquer pessoa com o link.
-DRIVE_ID = "1im5b67eDhFewWdIqWCr0LExGyHdIOK7j"
+DRIVE_ID = "1HPKaJqWxYVkk2dZy9_SSDUtfm_zMCuI-"
+# "VADE MECUM - edição em livro.pdf": a versão para leitura, aberta pelo link "Entendimento completo".
+PDF_ID = "1hV3234g0YfCiZEGCujkgvzwr1GcH2BKN"
 NOME_PADRAO = "Entendimento das Juntas"
 RAIZ = Path(__file__).resolve().parent.parent
 _DOWNLOAD = "https://drive.google.com/uc?export=download&id={}"
@@ -186,15 +188,16 @@ def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Divide o Entendimento das Juntas por tópico.")
     parser.add_argument("--drive-id", default=DRIVE_ID, help="ID do .docx no Google Drive (compartilhado por link)")
     parser.add_argument("--docx", type=Path, help="lê este .docx local em vez de baixar do Drive")
+    parser.add_argument("--pdf-id", default=PDF_ID, help="ID do PDF no Drive, aberto pelo link do documento")
     parser.add_argument("--saida", type=Path, default=RAIZ / "site_data" / "entendimento.json")
     args = parser.parse_args(argv)
 
     try:
         if args.docx:
-            doc = documento(args.docx.read_bytes(), args.docx.name)
+            doc = documento(args.docx.read_bytes(), args.docx.name, _VER.format(args.pdf_id))
         else:
             nome, conteudo, modificado = baixar_do_drive(args.drive_id)
-            doc = documento(conteudo, nome, _VER.format(args.drive_id), modificado)
+            doc = documento(conteudo, nome, _VER.format(args.pdf_id), modificado)
     except (OSError, ValueError) as exc:
         raise SystemExit(f"Entendimento não lido: {exc}") from exc
     # Só a apresentação (ou nada): não é o Entendimento, ou o formato dos títulos mudou.

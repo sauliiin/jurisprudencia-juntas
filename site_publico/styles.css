@@ -1033,6 +1033,66 @@ mark {
   line-height: 1.65;
 }
 
+/* Vade Mecum na home: capa à esquerda, texto e botões de baixar e ler. */
+.home-livro {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--s-6);
+  align-items: center;
+  padding: var(--s-8);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background:
+    radial-gradient(70% 120% at 0% 0%, var(--hero-a), transparent 70%),
+    radial-gradient(60% 120% at 100% 100%, var(--hero-b), transparent 70%),
+    var(--surface);
+  box-shadow: var(--shadow-card);
+}
+
+.home-livro-icone {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border-radius: var(--r-lg);
+  background: var(--btn-grad);
+  color: var(--accent-ink);
+}
+
+.home-livro-icone .icon {
+  width: 30px;
+  height: 30px;
+}
+
+.home-livro h2 {
+  font-size: 22px;
+  letter-spacing: -0.02em;
+}
+
+.home-livro-texto p:not(.secao-rotulo) {
+  margin-top: var(--s-2);
+  color: var(--muted);
+  line-height: 1.65;
+}
+
+.home-livro-acoes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+
+@media (max-width: 760px) {
+  .home-livro {
+    grid-template-columns: 1fr;
+    padding: var(--s-6);
+  }
+
+  .home-livro-acoes {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+}
+
 .link-seta {
   display: inline-flex;
   align-items: center;

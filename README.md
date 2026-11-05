@@ -112,7 +112,8 @@ O documento é um `.docx` compartilhado no Google Drive. `python -m api.entendim
 pelos tópicos do sumário com o parser do assistente offline ([api/entendimento.py](api/entendimento.py))
 e grava `site_data/entendimento.json`, versionado e copiado para o pacote do Lambda. Editar o mesmo arquivo no
 Drive basta: o `atualizar_tudo.sh` baixa de novo e publica. Para usar outro arquivo, troque `DRIVE_ID` (ou rode
-com `--drive-id`, ou `--docx` para um arquivo local).
+com `--drive-id`, ou `--docx` para um arquivo local). O link "Entendimento das Juntas completo" abre o PDF do
+Vade Mecum (`PDF_ID`, ou `--pdf-id`), a versão para leitura, que a home também oferece para baixar.
 
 **Configurar a chave (uma vez).** Crie a chave no provedor (no Groq: console.groq.com → API Keys) e guarde no
 SSM Parameter Store da AWS como SecureString (o nível padrão é gratuito). A chave não fica no GitHub nem no
