@@ -7,7 +7,9 @@ import json
 import sys
 import types
 import urllib.error
+import zipfile
 from pathlib import Path
+from xml.sax.saxutils import escape
 
 import pytest
 from fastapi.testclient import TestClient
@@ -18,25 +20,47 @@ from api.config import Settings
 from api.main import create_app
 from api.services import pergunta
 
-TEXTO = "\n\n".join(
-    [
-        "VADE MECUM",
-        "Jurisprudência é o conjunto das decisões.",
-        "SUMÁRIO",
-        "1 - Autuação por deixar de roçar - Pg. 3",
-        "CAPÍTULO III – LIMPEZA URBANA",
-        "1 - Autuação por deixar de roçar ou limpar lote com frente para logradouro público",
-        "O proprietário responde pela limpeza do lote.",
-        "1.4 - Autuação para roçar lote penhorado",
-        "A penhora não retira do proprietário o dever de roçar o lote.",
-        "CAPÍTULO VI - Temas de direito",
-        "1 - Dupla visita.",
-        "A dupla visita exige notificação antes do auto.",
-        "7 - Órgão público pode ser autuado?",
-        "Sim: órgão público responde pela infração como qualquer pessoa.",
-        "8 - Duplicidade recursal " + "x" * 190 + " - O segundo recurso não é conhecido.",
-    ]
-)
+PARAGRAFOS = [
+    "VADE MECUM",
+    "Jurisprudência é o conjunto das decisões.",
+    "SUMÁRIO",
+    "CAPÍTULO III - LIMPEZA URBANA 13",
+    "1.4 – Autuação para roçar lote penhorado 17",
+    "1.5 – “Lote” contíguo - Pg. 18",
+    "CAPÍTULO III – LIMPEZA URBANA",
+    "1 - Autuação por deixar de roçar ou limpar lote com frente para logradouro público",
+    "O proprietário responde pela limpeza do lote.",
+    "1.4 - Autuação para roçar lote penhorado",
+    "A penhora não retira do proprietário o dever de roçar o lote.",
+    "1.5 – “Lote” contíguo",
+    "Cada lote contíguo recebe a sua notificação.",
+    "CAPÍTULO VI - Temas de direito",
+    "1 - Dupla visita.",
+    "A dupla visita exige notificação antes do auto.",
+    "7 - Órgão público pode ser autuado?",
+    "Sim: órgão público responde pela infração como qualquer pessoa.",
+    "8 - Duplicidade recursal " + "x" * 190 + " - O segundo recurso não é conhecido.",
+]
+TEXTO = "\n\n".join(PARAGRAFOS)
+LINK = "https://drive.google.com/file/d/ent/view"
+_NS = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'
+
+
+def _docx(paragrafos: list[str], modificado: str | None = "2026-11-01T10:00:00Z") -> bytes:
+    """.docx mínimo: um <w:p> por parágrafo; o primeiro leva um tab e uma caixa de texto."""
+    corpo = "".join(f"<w:p><w:r><w:t>{escape(p)}</w:t></w:r></w:p>" for p in paragrafos[1:])
+    caixa = "<w:r><w:txbxContent><w:p><w:r><w:t>na caixa</w:t></w:r></w:p></w:txbxContent></w:r>"
+    primeiro = f"<w:p><w:r><w:t>{escape(paragrafos[0])}</w:t><w:tab/><w:t>fim</w:t></w:r>{caixa}</w:p>"
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("word/document.xml", f"<w:document {_NS}><w:body>{primeiro}{corpo}</w:body></w:document>")
+        if modificado:
+            z.writestr(
+                "docProps/core.xml",
+                '<cp:coreProperties xmlns:cp="c" xmlns:dcterms="http://purl.org/dc/terms/">'
+                f"<dcterms:modified>{modificado}</dcterms:modified></cp:coreProperties>",
+            )
+    return buf.getvalue()
 
 
 @pytest.fixture(autouse=True)
@@ -49,28 +73,14 @@ def _limpa_caches():
 
 
 @pytest.fixture
-def pareceres(tmp_path: Path) -> Path:
-    caminho = tmp_path / "pareceres.jsonl"
-    docs = [
-        {"nome_arquivo": "PARECER 1.pdf", "texto": "Parecer sobre ENTENDIMENTO JUNTAS 2024.docx citado."},
-        {"nome_arquivo": "ENTENDIMENTO JUNTAS.docx", "texto": "versão antiga"},
-        {
-            "nome_arquivo": entendimento.ARQUIVO,
-            "texto": TEXTO,
-            "drive_view_url": "https://drive.google.com/file/d/ent/view",
-            "modificado_em": "2025-05-28T11:58:14.490Z",
-        },
-    ]
-    caminho.write_text("\n".join(json.dumps(d, ensure_ascii=False) for d in docs) + "\n", encoding="utf-8")
-    return caminho
-
-
-@pytest.fixture
-def ent_settings(settings: Settings, pareceres: Path) -> Settings:
+def ent_settings(settings: Settings, tmp_path: Path) -> Settings:
+    """Settings com o entendimento.json no lugar padrão (dados_dir) e uma chave de teste."""
+    doc = entendimento.documento(_docx(PARAGRAFOS), "ENTENDIMENTO.docx", LINK)
+    (tmp_path / "entendimento.json").write_text(json.dumps(doc, ensure_ascii=False), encoding="utf-8")
     return settings.model_copy(
         update={
-            "entendimento": pareceres.parent / "entendimento.json",
-            "dados_dir": pareceres.parent,
+            "entendimento": None,
+            "dados_dir": tmp_path,
             "llm_api_key": SecretStr("chave-teste"),
             "llm_api_key_ssm": None,
         }
@@ -78,6 +88,10 @@ def ent_settings(settings: Settings, pareceres: Path) -> Settings:
 
 
 class _Resposta(io.BytesIO):
+    def __init__(self, corpo: bytes = b"", headers: dict | None = None):
+        super().__init__(corpo)
+        self.headers = headers or {}
+
     def __enter__(self):
         return self
 
@@ -113,32 +127,117 @@ def test_topicos_do_texto() -> None:
     topicos = entendimento.topicos(entendimento.paragrafos(TEXTO))
     titulos = [t["titulo"] for t in topicos]
     assert titulos[0] == "Apresentação"
-    assert "Pg. 3" not in " ".join(t["texto"] for t in topicos)  # o sumário fica de fora
+    # O sumário fica de fora, com número de página solto ("... 17") ou "Pg. N".
+    assert not any(t.endswith(("13", "17")) or "Pg." in t for t in titulos)
+    assert "Pg. 18" not in " ".join(t["texto"] for t in topicos)
     assert (
         "CAPÍTULO III – LIMPEZA URBANA › 1 - Autuação por deixar de roçar ou limpar lote com frente para "
         "logradouro público › 1.4 - Autuação para roçar lote penhorado"
     ) in titulos
+    assert any(t.endswith("1.5 - “Lote” contíguo") for t in titulos)  # título que começa com aspas
     assert "CAPÍTULO VI – TEMAS DE DIREITO › 1 - Dupla visita." in titulos
     # Título colado ao texto: corta no traço.
     duplicidade = next(t for t in topicos if "Duplicidade" in t["titulo"])
     assert duplicidade["texto"] == "O segundo recurso não é conhecido."
 
 
-def test_do_acervo_acha_so_a_versao_2024(pareceres: Path) -> None:
-    doc = entendimento.do_acervo(pareceres)
-    assert doc["arquivo"] == entendimento.ARQUIVO
-    assert doc["link"] == "https://drive.google.com/file/d/ent/view"
-    assert len(doc["topicos"]) == 6
-    assert entendimento.do_acervo(pareceres, "NAO EXISTE.docx") is None
+def test_linha_do_sumario_fora_do_sumario() -> None:
+    topicos = entendimento.topicos(["CAPÍTULO I - Obras", "1 - Baixa - Pg. 4", "1 - Baixa", "Texto da baixa."])
+    assert [t["titulo"] for t in topicos] == ["CAPÍTULO I – OBRAS › 1 - Baixa"]
 
 
-def test_cli_grava_o_json(pareceres: Path, tmp_path: Path, capsys) -> None:
-    saida = tmp_path / "build" / "entendimento.json"
-    entendimento.main(["--pareceres", str(pareceres), "--saida", str(saida)])
-    assert json.loads(saida.read_text(encoding="utf-8"))["topicos"][1]["titulo"].startswith("CAPÍTULO III")
-    assert "6 tópicos" in capsys.readouterr().out
-    with pytest.raises(SystemExit):
-        entendimento.main(["--pareceres", str(pareceres), "--saida", str(saida), "--arquivo", "X.docx"])
+def test_ler_docx() -> None:
+    texto, modificado = entendimento.ler_docx(_docx(["Título", "Segundo parágrafo"]))
+    assert entendimento.paragrafos(texto) == ["Título fim", "na caixa", "Segundo parágrafo"]
+    assert modificado == "2026-11-01T10:00:00Z"
+    assert entendimento.ler_docx(_docx(["Só"], modificado=None))[1] is None
+    with pytest.raises(ValueError, match="docx"):
+        entendimento.ler_docx(b"<html>login</html>")
+
+
+def test_nome_do_arquivo_no_cabecalho() -> None:
+    nome = entendimento._nome_do_cabecalho
+    assert nome("attachment; filename*=UTF-8''ENTENDIMENTO%20vers%C3%A3o.docx") == "ENTENDIMENTO versão.docx"
+    # O Drive manda UTF-8 cru; o urllib o lê como latin-1.
+    assert nome('attachment; filename="vers\u00c3\u00a3o.docx"') == "versão.docx"
+    assert nome('attachment; filename="custo €.docx"') == "custo €.docx"
+    assert nome('attachment; filename="\u00e3.docx"') == "\u00e3.docx"
+    assert nome("") is None
+
+
+def test_data_http() -> None:
+    assert entendimento._data_http("Thu, 05 Nov 2026 15:21:22 GMT") == "2026-11-05T15:21:22Z"
+    assert entendimento._data_http(None) is None
+    assert entendimento._data_http("ontem") is None
+
+
+@pytest.fixture
+def drive(monkeypatch: pytest.MonkeyPatch):
+    """Troca o Drive: `drive.resposta` é o que volta; `drive.pedidos` guarda os pedidos."""
+    estado = types.SimpleNamespace(pedidos=[], resposta=None)
+
+    def urlopen(req, timeout):
+        estado.pedidos.append(req)
+        if isinstance(estado.resposta, Exception):
+            raise estado.resposta
+        return estado.resposta
+
+    monkeypatch.setattr(entendimento.urllib.request, "urlopen", urlopen)
+    return estado
+
+
+def test_cli_baixa_do_drive(drive, tmp_path: Path, capsys) -> None:
+    drive.resposta = _Resposta(
+        _docx(PARAGRAFOS),
+        {
+            "Content-Disposition": 'attachment; filename="ENTENDIMENTO JUNTAS 2026 - vers\u00c3\u00a3o final.docx"',
+            "Last-Modified": "Thu, 05 Nov 2026 15:21:22 GMT",
+        },
+    )
+    saida = tmp_path / "site_data" / "entendimento.json"
+    entendimento.main(["--drive-id", "abc", "--saida", str(saida)])
+    doc = json.loads(saida.read_text(encoding="utf-8"))
+    assert doc["arquivo"] == "ENTENDIMENTO JUNTAS 2026 - versão final.docx"
+    assert doc["link"] == "https://drive.google.com/file/d/abc/view"
+    assert doc["modificado_em"] == "2026-11-05T15:21:22Z"  # a data do Drive vale mais que a do arquivo
+    assert doc["topicos"][1]["titulo"].startswith("CAPÍTULO III")
+    assert "7 tópicos" in capsys.readouterr().out
+    assert drive.pedidos[0].full_url.endswith("id=abc")
+    assert drive.pedidos[0].get_header("User-agent").startswith("omniai-jurisprudencia/")
+
+
+def test_cli_sem_nome_no_cabecalho(drive, tmp_path: Path) -> None:
+    drive.resposta = _Resposta(_docx(PARAGRAFOS))
+    saida = tmp_path / "entendimento.json"
+    entendimento.main(["--saida", str(saida)])
+    doc = json.loads(saida.read_text(encoding="utf-8"))
+    assert doc["arquivo"] == f"{entendimento.DRIVE_ID}.docx"
+    assert doc["modificado_em"] == "2026-11-01T10:00:00Z"
+
+
+@pytest.mark.parametrize(
+    "resposta",
+    [_Resposta(b"<html>Fazer login</html>"), urllib.error.URLError("sem rede")],
+    ids=["nao_compartilhado", "fora_do_ar"],
+)
+def test_cli_drive_falha(drive, tmp_path: Path, resposta) -> None:
+    drive.resposta = resposta
+    saida = tmp_path / "entendimento.json"
+    with pytest.raises(SystemExit, match="Entendimento não lido"):
+        entendimento.main(["--saida", str(saida)])
+    assert not saida.exists()
+
+
+def test_cli_docx_local(tmp_path: Path) -> None:
+    arquivo = tmp_path / "ENTENDIMENTO.docx"
+    arquivo.write_bytes(_docx(PARAGRAFOS))
+    saida = tmp_path / "entendimento.json"
+    entendimento.main(["--docx", str(arquivo), "--saida", str(saida)])
+    assert json.loads(saida.read_text(encoding="utf-8"))["arquivo"] == "ENTENDIMENTO.docx"
+    vazio = tmp_path / "VAZIO.docx"
+    vazio.write_bytes(_docx([""]))
+    with pytest.raises(SystemExit, match="nenhum tópico"):
+        entendimento.main(["--docx", str(vazio), "--saida", str(saida)])
 
 
 # ---------- Busca nos tópicos ----------
@@ -156,11 +255,13 @@ def test_busca_acha_o_topico(ent_settings: Settings) -> None:
     assert doc.buscar("presidente da república") == []
 
 
-def test_carrega_do_json_quando_existe(ent_settings: Settings, pareceres: Path) -> None:
-    doc = entendimento.do_acervo(pareceres)
-    doc["topicos"] = [{"titulo": "Só no JSON", "texto": "tópico gerado pelo build"}]
-    ent_settings.entendimento.write_text(json.dumps(doc), encoding="utf-8")
-    assert [t.titulo for t in pergunta.carregar(ent_settings).topicos] == ["Só no JSON"]
+def test_caminho_do_json_configurado(ent_settings: Settings, tmp_path: Path) -> None:
+    outro = tmp_path / "build" / "entendimento.json"
+    outro.parent.mkdir()
+    outro.write_text(json.dumps({"topicos": [{"titulo": "Só no build", "texto": "tópico"}]}), encoding="utf-8")
+    doc = pergunta.carregar(ent_settings.model_copy(update={"entendimento": outro}))
+    assert [t.titulo for t in doc.topicos] == ["Só no build"]
+    assert doc.arquivo == entendimento.NOME_PADRAO
 
 
 def test_recorte_mantem_os_paragrafos_da_pergunta() -> None:
@@ -198,7 +299,7 @@ def test_pergunta_respondida_com_citacao(ent_settings: Settings, modelo) -> None
     assert dados["modelo"] == ent_settings.llm_modelo
     assert dados["fontes"][0]["n"] == 1
     assert dados["fontes"][0]["titulo"].endswith("lote penhorado")
-    assert dados["documento"]["link"] == "https://drive.google.com/file/d/ent/view"
+    assert dados["documento"]["link"] == LINK
     pedido = modelo.pedidos[0]
     assert pedido["url"] == ent_settings.llm_url
     assert pedido["headers"]["Authorization"] == "Bearer chave-teste"

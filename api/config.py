@@ -40,11 +40,11 @@ class Settings(BaseSettings):
     servir_site: bool = Field(default=True, description="Serve site_publico/ e site_data/ junto com a API.")
 
     # Perguntas sobre o Entendimento das Juntas (/api/perguntar).
-    entendimento: Path = Field(
-        default=RAIZ / "entendimento.json",
+    entendimento: Path | None = Field(
+        default=None,
         description=(
             "Tópicos do Entendimento das Juntas, gerados por `python -m api.entendimento`. "
-            "Sem o arquivo, a API lê o documento de dados_dir/pareceres.jsonl."
+            "Vazio: dados_dir/entendimento.json."
         ),
     )
     llm_url: str = Field(

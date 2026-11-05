@@ -10,6 +10,7 @@ python -m pip install --quiet --target build/lambda \
 cp -r api build/lambda/
 [ -f indice_publico.db ] || python -m api.indice
 cp indice_publico.db build/lambda/
-python -m api.entendimento --saida build/lambda/entendimento.json
+# Tópicos do Entendimento: gerados por python -m api.entendimento e versionados em site_data/.
+cp site_data/entendimento.json build/lambda/
 find build/lambda -name "__pycache__" -type d -prune -exec rm -rf {} +
 du -sh build/lambda

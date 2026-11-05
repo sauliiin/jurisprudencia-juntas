@@ -132,7 +132,7 @@ class Entendimento:
 
 def _de_dict(doc: dict) -> Entendimento:
     return Entendimento(
-        arquivo=doc.get("arquivo") or entendimento.ARQUIVO,
+        arquivo=doc.get("arquivo") or entendimento.NOME_PADRAO,
         link=doc.get("link"),
         modificado_em=doc.get("modificado_em"),
         topicos=[Topico(t["titulo"], t["texto"]) for t in doc.get("topicos", [])],
@@ -140,18 +140,14 @@ def _de_dict(doc: dict) -> Entendimento:
 
 
 @lru_cache(maxsize=4)
-def _carregar(json_path: Path, pareceres: Path) -> Entendimento:
-    if json_path.is_file():
-        return _de_dict(json.loads(json_path.read_text(encoding="utf-8")))
-    if pareceres.is_file():
-        doc = entendimento.do_acervo(pareceres)
-        if doc and doc["topicos"]:
-            return _de_dict(doc)
-    raise EntendimentoIndisponivel(f"Entendimento não encontrado em {json_path.name} nem em {pareceres.name}")
+def _carregar(json_path: Path) -> Entendimento:
+    if not json_path.is_file():
+        raise EntendimentoIndisponivel(f"Entendimento não encontrado em {json_path}")
+    return _de_dict(json.loads(json_path.read_text(encoding="utf-8")))
 
 
 def carregar(settings: Settings) -> Entendimento:
-    return _carregar(settings.entendimento, settings.dados_dir / "pareceres.jsonl")
+    return _carregar(settings.entendimento or settings.dados_dir / "entendimento.json")
 
 
 # ---------- O que vai para o modelo ----------

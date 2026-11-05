@@ -55,7 +55,7 @@ que estão em outro sistema (SIF). Este projeto junta tudo num buscador:
 - **Pareceres e legislação:** os mesmos recursos para o acervo de pareceres e para a legislação municipal
   dividida em artigos, com "artigos semelhantes".
 - **Pergunte ao Entendimento:** pergunta em português respondida por um modelo de linguagem só com base no
-  Entendimento das Juntas (Vade Mecum, 2024), citando o tópico usado ([detalhes](#pergunte-ao-entendimento)).
+  Entendimento das Juntas (Vade Mecum, 2026), citando o tópico usado ([detalhes](#pergunte-ao-entendimento)).
 - **Visual atual:** temas claro, escuro e cyberpunk (a paleta neon do site original), layout de celular com filtros recolhidos e detalhe em tela cheia,
   acessibilidade (contraste AA, foco visível, navegação por teclado).
 - **Dois modos de implantação:** com a API (busca no servidor, download inicial pequeno) ou estático no
@@ -87,12 +87,13 @@ Detalhes em [site_publico/ia.html](site_publico/ia.html) e [treinar_ia.py](trein
 ## Pergunte ao Entendimento
 
 A página [`pergunte/`](site_publico/pergunte/) responde perguntas sobre um único documento, o
-**Entendimento das Juntas** (`ENTENDIMENTO JUNTAS 2024.docx`, Vade Mecum de jurisprudência administrativa).
+**Entendimento das Juntas** (`ENTENDIMENTO JUNTAS 2026 - versão final.docx`, Vade Mecum de jurisprudência
+administrativa).
 Quem pergunta não baixa nada: tudo roda no servidor.
 
 ```text
 pergunta -> /api/perguntar (Lambda)
-  -> BM25 sobre os 44 tópicos do Entendimento: os até 3 que tratam da pergunta (milissegundos)
+  -> BM25 sobre os 53 tópicos do Entendimento: os até 3 que tratam da pergunta (milissegundos)
   -> só esses tópicos (até 6 mil caracteres) vão para o modelo, com a ordem de responder só com base neles e citar [n]
   -> as citações são conferidas no código: número que não é de um tópico enviado sai
   -> resposta + texto integral dos tópicos citados, para conferir
@@ -107,9 +108,11 @@ pergunta -> /api/perguntar (Lambda)
 - **Cota protegida:** a rota tem limite próprio no API Gateway (1 pergunta/s, picos de 3).
 - **Sem dados no log:** o log registra o tamanho da pergunta e o resultado, não o texto.
 
-Os tópicos saem de `site_data/pareceres.jsonl` com o mesmo parser do assistente offline
-([api/entendimento.py](api/entendimento.py)); o build do Lambda grava `entendimento.json` no pacote. Rodando
-local sem esse arquivo, a API lê o documento direto do acervo.
+O documento é um `.docx` compartilhado no Google Drive. `python -m api.entendimento` o baixa pelo ID, divide
+pelos tópicos do sumário com o parser do assistente offline ([api/entendimento.py](api/entendimento.py))
+e grava `site_data/entendimento.json`, versionado e copiado para o pacote do Lambda. Editar o mesmo arquivo no
+Drive basta: o `atualizar_tudo.sh` baixa de novo e publica. Para usar outro arquivo, troque `DRIVE_ID` (ou rode
+com `--drive-id`, ou `--docx` para um arquivo local).
 
 **Configurar a chave (uma vez).** Crie a chave no provedor (no Groq: console.groq.com → API Keys) e guarde no
 SSM Parameter Store da AWS como SecureString (o nível padrão é gratuito). A chave não fica no GitHub nem no
@@ -324,7 +327,7 @@ Variáveis de ambiente com prefixo `JURIS_` (padrões para rodar local em [api/c
 | `JURIS_WORKERS` | `1` | Processos do uvicorn |
 | `JURIS_MAX_LIMIT` | `100` | Máximo de resultados por página |
 | `JURIS_LOG_LEVEL` | `INFO` | Nível dos logs (JSON, uma linha por evento) |
-| `JURIS_ENTENDIMENTO` | `entendimento.json` | Tópicos do Entendimento; sem o arquivo, lê de `site_data/pareceres.jsonl` |
+| `JURIS_ENTENDIMENTO` | `site_data/entendimento.json` | Tópicos do Entendimento, gerados por `python -m api.entendimento` |
 | `JURIS_LLM_URL` | endpoint do Groq | Chat no formato da OpenAI usado em `/api/perguntar` |
 | `JURIS_LLM_MODELO` | `qwen/qwen3.8-27b` | Modelo desse endpoint |
 | `JURIS_LLM_API_KEY` | vazio | Chave do serviço (uso local) |
@@ -382,7 +385,7 @@ logs:
 ## Testes e qualidade
 
 ```bash
-pytest --cov          # 90 testes, 99% de cobertura no pacote api/
+pytest --cov          # 97 testes, 99% de cobertura no pacote api/
 ruff check . && ruff format --check .
 ```
 

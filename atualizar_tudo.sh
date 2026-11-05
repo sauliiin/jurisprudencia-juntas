@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Atualiza o acervo público (votos organizados por lei/ato, pareceres e legislação) e
-# publica no site: baixa só o que é novo, reexporta os JSONL do site, retreina a
-# IA do site, regera o índice público da API e envia (git add/commit/push) as mudanças em site_data/ e
-# marco_atualizacao.json.
+# publica no site: baixa só o que é novo, reexporta os JSONL do site, baixa o Entendimento
+# das Juntas do Drive, retreina a IA do site, regera o índice público da API e envia
+# (git add/commit/push) as mudanças em site_data/ e marco_atualizacao.json.
 #
 # Uso: ./atualizar_tudo.sh
 set -euo pipefail
@@ -21,15 +21,15 @@ fi
 
 PASTA_PUBLICA_VOTOS="1LW-tLhZfsc8l1-vBFqrFK86rtuUPIDer"
 
-echo "== 1/7 Organizando votos por lei/ato (baixar_e_organizar_por_ato.py) =="
+echo "== 1/8 Organizando votos por lei/ato (baixar_e_organizar_por_ato.py) =="
 python3 -u baixar_e_organizar_por_ato.py --continuar
 
 echo
-echo "== 2/7 Atualizando acervo público de votos (preparar_acervo_publico.py) =="
+echo "== 2/8 Atualizando acervo público de votos (preparar_acervo_publico.py) =="
 python3 -u preparar_acervo_publico.py --buscar-novos
 
 echo
-echo "== 3/7 Atualizando links públicos do Drive (atualizar_links_drive_publico.py) =="
+echo "== 3/8 Atualizando links públicos do Drive (atualizar_links_drive_publico.py) =="
 # Esse script retorna código 1 quando há arquivos ainda sem link público
 # (normal: eles continuam pesquisáveis até serem sincronizados com a pasta
 # pública). Não é motivo para abortar o restante da atualização.
@@ -42,16 +42,27 @@ if [ "$status" -ne 0 ]; then
 fi
 
 echo
-echo "== 4/7 Atualizando pareceres (preparar_pareceres.py) =="
+echo "== 4/8 Atualizando pareceres (preparar_pareceres.py) =="
 python3 -u preparar_pareceres.py
 
 echo
-echo "== 5/7 Atualizando legislação (preparar_pareceres.py --legislacao) =="
+echo "== 5/8 Atualizando legislação (preparar_pareceres.py --legislacao) =="
 # Texto inteiro, filtro por norma, redação revogada marcada e divisão em artigos.
 python3 -u preparar_pareceres.py --legislacao
 
 echo
-echo "== 6/7 Retreinando a IA do site (treinar_ia.py) =="
+echo "== 6/8 Baixando o Entendimento das Juntas do Drive (python3 -m api.entendimento) =="
+# Tópicos usados por /api/perguntar. Se o Drive falhar, o site segue com a versão anterior.
+set +e
+python3 -u -m api.entendimento
+status=$?
+set -e
+if [ "$status" -ne 0 ]; then
+  echo "[aviso] Entendimento não baixado; mantendo site_data/entendimento.json anterior."
+fi
+
+echo
+echo "== 7/8 Retreinando a IA do site (treinar_ia.py) =="
 # O modelo é refeito com o acervo atualizado. Se falhar (ex.: numpy ausente), o site continua
 # funcionando com o modelo anterior; só os votos novos ficam fora dos "casos semelhantes".
 set +e
@@ -64,21 +75,22 @@ if [ "$status" -ne 0 ]; then
 fi
 
 echo
-echo "== 7/7 Regerando o índice público da API (python3 -m api.indice) =="
+echo "== 8/8 Regerando o índice público da API (python3 -m api.indice) =="
 # Montado do votos.jsonl mascarado, com o resultado lido pela IA retreinada acima. Fica fora
 # do Git (é grande); a API em produção recebe o arquivo por volume.
 python3 -u -m api.indice
 
 echo
 echo "== Publicando no Git =="
-git add site_data/votos.jsonl site_data/pareceres.jsonl site_data/legislacao.jsonl marco_atualizacao.json site_data/ia
+git add site_data/votos.jsonl site_data/pareceres.jsonl site_data/legislacao.jsonl site_data/entendimento.json \
+  marco_atualizacao.json site_data/ia
 
 if git diff --cached --quiet; then
   echo "Nada novo para publicar (nenhuma mudança em site_data/ ou marco_atualizacao.json)."
   exit 0
 fi
 
-git commit -m "Atualiza acervo público: votos, pareceres e legislação ($(date '+%Y-%m-%d %H:%M'))"
+git commit -m "Atualiza acervo público: votos, pareceres, legislação e Entendimento ($(date '+%Y-%m-%d %H:%M'))"
 git push
 
 echo
