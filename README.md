@@ -54,6 +54,8 @@ que estão em outro sistema (SIF). Este projeto junta tudo num buscador:
 - **Casos semelhantes:** as cinco decisões mais parecidas e como cada uma foi julgada.
 - **Pareceres e legislação:** os mesmos recursos para o acervo de pareceres e para a legislação municipal
   dividida em artigos, com "artigos semelhantes".
+- **Pergunte ao Entendimento:** pergunta em português respondida por um modelo de linguagem só com base no
+  Entendimento das Juntas (Vade Mecum, 2024), citando o tópico usado ([detalhes](#pergunte-ao-entendimento)).
 - **Visual atual:** temas claro, escuro e cyberpunk (a paleta neon do site original), layout de celular com filtros recolhidos e detalhe em tela cheia,
   acessibilidade (contraste AA, foco visível, navegação por teclado).
 - **Dois modos de implantação:** com a API (busca no servidor, download inicial pequeno) ou estático no
@@ -81,6 +83,45 @@ Medido em 1.802 decisões fora do treino, com a infração registrada no SIF com
 | Busca a partir do relato do fiscal (MRR@10) | **0,60** |
 
 Detalhes em [site_publico/ia.html](site_publico/ia.html) e [treinar_ia.py](treinar_ia.py).
+
+## Pergunte ao Entendimento
+
+A página [`pergunte/`](site_publico/pergunte/) responde perguntas sobre um único documento, o
+**Entendimento das Juntas** (`ENTENDIMENTO JUNTAS 2024.docx`, Vade Mecum de jurisprudência administrativa).
+Quem pergunta não baixa nada: tudo roda no servidor.
+
+```text
+pergunta -> /api/perguntar (Lambda)
+  -> BM25 sobre os 44 tópicos do Entendimento: os até 3 que tratam da pergunta (milissegundos)
+  -> só esses tópicos (até 6 mil caracteres) vão para o modelo, com a ordem de responder só com base neles e citar [n]
+  -> as citações são conferidas no código: número que não é de um tópico enviado sai
+  -> resposta + texto integral dos tópicos citados, para conferir
+```
+
+- **Grátis:** o modelo é chamado num serviço com plano gratuito. O padrão é o Groq (`qwen/qwen3.8-27b`),
+  mas qualquer endpoint no formato da OpenAI serve (Gemini, OpenRouter, Cloudflare Workers AI): basta trocar
+  `JURIS_LLM_URL` e `JURIS_LLM_MODELO`. Mandar só os tópicos certos, e não o documento inteiro (~22 mil
+  tokens), é o que faz a cota gratuita render.
+- **Nunca fica sem resposta:** sem chave, com o limite gratuito esgotado ou com o serviço fora do ar, a página
+  mostra os tópicos encontrados, com um aviso. Pergunta sem nenhum termo do Entendimento nem chega ao modelo.
+- **Cota protegida:** a rota tem limite próprio no API Gateway (1 pergunta/s, picos de 3).
+- **Sem dados no log:** o log registra o tamanho da pergunta e o resultado, não o texto.
+
+Os tópicos saem de `site_data/pareceres.jsonl` com o mesmo parser do assistente offline
+([api/entendimento.py](api/entendimento.py)); o build do Lambda grava `entendimento.json` no pacote. Rodando
+local sem esse arquivo, a API lê o documento direto do acervo.
+
+**Configurar a chave (uma vez).** Crie a chave no provedor (no Groq: console.groq.com → API Keys) e guarde no
+SSM Parameter Store da AWS como SecureString (o nível padrão é gratuito). A chave não fica no GitHub nem no
+template:
+
+```bash
+aws ssm put-parameter --region sa-east-1 --name /omniailab/llm-api-key --type SecureString --value "SUA_CHAVE"
+```
+
+O Lambda lê o parâmetro na primeira pergunta (permissão só para ele, no template). Para trocar a chave, rode o
+mesmo comando com `--overwrite`; a nova vale quando o Lambda reiniciar (ou no próximo deploy). Local:
+`JURIS_LLM_API_KEY=SUA_CHAVE python -m api`.
 
 ## Arquitetura
 
@@ -283,6 +324,12 @@ Variáveis de ambiente com prefixo `JURIS_` (padrões para rodar local em [api/c
 | `JURIS_WORKERS` | `1` | Processos do uvicorn |
 | `JURIS_MAX_LIMIT` | `100` | Máximo de resultados por página |
 | `JURIS_LOG_LEVEL` | `INFO` | Nível dos logs (JSON, uma linha por evento) |
+| `JURIS_ENTENDIMENTO` | `entendimento.json` | Tópicos do Entendimento; sem o arquivo, lê de `site_data/pareceres.jsonl` |
+| `JURIS_LLM_URL` | endpoint do Groq | Chat no formato da OpenAI usado em `/api/perguntar` |
+| `JURIS_LLM_MODELO` | `qwen/qwen3.8-27b` | Modelo desse endpoint |
+| `JURIS_LLM_API_KEY` | vazio | Chave do serviço (uso local) |
+| `JURIS_LLM_API_KEY_SSM` | vazio | Parâmetro SecureString do SSM com a chave (uso no Lambda) |
+| `JURIS_LLM_TIMEOUT` / `JURIS_LLM_MAX_CHARS` | `12` / `6000` | Espera pelo modelo (s) e texto enviado por pergunta |
 
 No front, a URL da API fica em [site_publico/config.js](site_publico/config.js) (`API_BASE`).
 
@@ -297,6 +344,7 @@ Documentação interativa em `/docs` (OpenAPI).
 | `GET /api/search` | Busca paginada: `q`, `modo` (`phrase`, `words`), `instancia`, `mes`, `ano`, `limit`, `offset` |
 | `GET /api/voto/{file_id}` | Decisão completa, com texto e autos |
 | `GET /api/file/{file_id}` | Arquivo original (só com `JURIS_ARQUIVOS_DIR`) |
+| `GET /api/perguntar` | Pergunta (`q`) respondida a partir do Entendimento das Juntas: `resposta`, `aviso` e `fontes` |
 
 ```bash
 curl "http://localhost:8000/api/search?q=obra%20sem%20alvar%C3%A1&modo=phrase&limit=1"
@@ -334,7 +382,7 @@ logs:
 ## Testes e qualidade
 
 ```bash
-pytest --cov          # 56 testes, 99% de cobertura no pacote api/
+pytest --cov          # 90 testes, 99% de cobertura no pacote api/
 ruff check . && ruff format --check .
 ```
 
@@ -352,6 +400,8 @@ O acervo é público, mas as pessoas autuadas não precisam ser:
 - caminhos internos (`caminho_bruto`) não são publicados;
 - os títulos na tela usam só processo, infração e resultado;
 - a API lê só o índice gerado do acervo mascarado, e `/api/file` fica desligado por padrão;
+- em `/api/perguntar`, a pergunta vai ao serviço de IA (a página avisa para não digitar dados pessoais), e o
+  log da API não guarda o texto dela;
 - [scripts/verificar_acervo_publico.py](scripts/verificar_acervo_publico.py) confere o que foi publicado.
 
 Limites conhecidos: nomes de terceiros (requerentes, procuradores, fiscais) e números de CPF/CNPJ citados no
@@ -362,8 +412,8 @@ texto não são mascarados, e o botão "Abrir documento" leva ao arquivo origina
 1. **AWS: feito.** Site e API em produção, serverless, seguindo o AWS Well-Architected Framework; veja
    [docs/aws.md](docs/aws.md). Próximo passo de infraestrutura: índice em imagem de contêiner ou EFS quando
    passar do limite do pacote do Lambda.
-2. **Respostas com IA citando as decisões:** perguntas em linguagem natural respondidas por um modelo no
-   **Amazon Bedrock** a partir das decisões recuperadas pela busca, sempre com a citação de cada uma.
+2. **Respostas com IA: começou pelo Entendimento das Juntas** ([Pergunte ao Entendimento](#pergunte-ao-entendimento)).
+   Próximo: estender às decisões recuperadas pela busca, sempre com a citação de cada uma.
 3. Mascarar também CPF/CNPJ e nomes de terceiros no acervo publicado.
 
 ## Estrutura

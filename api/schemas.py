@@ -81,6 +81,29 @@ class Health(BaseModel):
     versao: str
 
 
+class FonteEntendimento(BaseModel):
+    n: int = Field(description="Número usado nas citações da resposta ([1], [2]...).")
+    titulo: str = Field(description="Capítulo e tópicos do Entendimento, do mais geral ao mais específico.")
+    texto: str = Field(description="Texto integral do tópico.")
+
+
+class DocumentoEntendimento(BaseModel):
+    arquivo: str
+    link: str | None = Field(default=None, description="Documento original no Google Drive.")
+    modificado_em: str | None = None
+
+
+class RespostaPergunta(BaseModel):
+    pergunta: str
+    resposta: str | None = Field(
+        description="Texto do modelo, com as citações [n] já conferidas; null se o modelo não respondeu."
+    )
+    aviso: str | None = Field(default=None, description="Observação para quem perguntou (sem tópico, sem IA...).")
+    modelo: str | None = Field(default=None, description="Modelo que escreveu a resposta.")
+    documento: DocumentoEntendimento
+    fontes: list[FonteEntendimento] = Field(description="Tópicos consultados, na ordem das citações.")
+
+
 class DetalheErro(BaseModel):
     codigo: str
     mensagem: str

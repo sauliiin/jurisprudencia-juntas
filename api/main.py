@@ -18,7 +18,7 @@ from fastapi.staticfiles import StaticFiles
 from api import __version__, erros
 from api.config import Settings, get_settings
 from api.logs import configurar_logs, request_id
-from api.routes import acervo, saude
+from api.routes import acervo, pergunta, saude
 
 log = logging.getLogger("api")
 
@@ -82,6 +82,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app.include_router(saude.router)
     app.include_router(acervo.router)
+    app.include_router(pergunta.router)
 
     if settings.servir_site:
         # Mesma estrutura do GitHub Pages: o site acha ../site_data/ como lá.

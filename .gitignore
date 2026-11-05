@@ -21,6 +21,8 @@ indice_busca.db
 indice_busca.db-*
 indice_publico.db
 indice_publico.db.tmp
+# Tópicos do Entendimento das Juntas, gerados por python -m api.entendimento
+entendimento.json
 pipeline*_cache.db
 pipeline*_cache.db-*
 *.sqlite
@@ -56,7 +58,6 @@ htmlcov/
 docker-compose.override.yml
 
 # Ferramentas, editor e sistema
-.claude/
 .idea/
 .vscode/
 .DS_Store

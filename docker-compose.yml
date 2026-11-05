@@ -35,6 +35,9 @@ services:
     environment:
       JURIS_CORS_ORIGINS: ${JURIS_CORS_ORIGINS:-}
       JURIS_LOG_LEVEL: ${JURIS_LOG_LEVEL:-INFO}
+      # /api/perguntar: sem chave, responde só com os tópicos do Entendimento.
+      JURIS_LLM_API_KEY: ${JURIS_LLM_API_KEY:-}
+      JURIS_LLM_MODELO: ${JURIS_LLM_MODELO:-qwen/qwen3.8-27b}
       JURIS_WORKERS: ${JURIS_WORKERS:-2}
       # Para servir os originais em /api/file (trazem nomes; só em ambiente privado):
       # JURIS_ARQUIVOS_DIR: /dados/arquivos

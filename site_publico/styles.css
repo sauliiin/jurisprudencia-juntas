@@ -2649,3 +2649,185 @@ body[data-ia="legislacao"] .text-preview {
 :root[data-theme="cyberpunk"] mark {
   box-shadow: 0 0 8px rgba(255, 235, 59, 0.45);
 }
+
+/* ---------- Pergunte ao Entendimento (pergunte/) ---------- */
+
+.searchbar-pergunta {
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "campo buscar";
+  max-width: none;
+}
+
+.pergunta-nota {
+  margin-top: var(--s-4);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.resposta {
+  margin-top: var(--s-8);
+}
+
+.resposta[hidden],
+.resposta [hidden] {
+  display: none;
+}
+
+.resposta .ia-hint {
+  margin: 0 0 var(--s-4);
+}
+
+.resposta-carregando {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  padding: var(--s-4) var(--s-5);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 15px;
+}
+
+.resposta-carregando .ponto {
+  width: 10px;
+  height: 10px;
+  border-radius: var(--r-full);
+  background: var(--btn-grad);
+  animation: pulsar 1s ease-in-out infinite;
+}
+
+@keyframes pulsar {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.8);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+}
+
+.resposta-texto {
+  padding: var(--s-5) var(--s-6);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  color: var(--ink);
+}
+
+.resposta-texto p:last-child {
+  margin-bottom: 0;
+}
+
+.citacao {
+  margin-left: 1px;
+  color: var(--accent-text);
+  font-size: 0.85em;
+  font-weight: 650;
+  text-decoration: none;
+  vertical-align: 1px;
+}
+
+.citacao:hover {
+  text-decoration: underline;
+}
+
+.resposta-modelo {
+  margin-top: var(--s-2);
+  font-size: 12.5px;
+}
+
+.fontes {
+  display: grid;
+  gap: var(--s-2);
+}
+
+.fonte {
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: var(--surface);
+  scroll-margin-top: calc(var(--topbar-h) + var(--s-4));
+}
+
+.fonte summary {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-3);
+  padding: var(--s-3) var(--s-4);
+  cursor: pointer;
+  list-style: none;
+}
+
+.fonte summary::-webkit-details-marker {
+  display: none;
+}
+
+.fonte summary:hover {
+  background: var(--surface-hover);
+}
+
+.fonte[open] summary {
+  border-bottom: 1px solid var(--line);
+}
+
+.fonte-n {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  min-width: 24px;
+  height: 24px;
+  border-radius: var(--r-full);
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.fonte-titulo {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  font-size: 14.5px;
+  line-height: 1.45;
+}
+
+.fonte-caminho {
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.fonte-texto {
+  padding: var(--s-4) var(--s-5);
+  font-size: 14.5px;
+  line-height: 1.7;
+}
+
+.fonte-texto p:last-child {
+  margin-bottom: 0;
+}
+
+.resposta-documento {
+  margin-top: var(--s-4);
+  font-size: 14px;
+}
+
+@media (max-width: 860px) {
+  .searchbar-pergunta {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "campo"
+      "buscar";
+  }
+
+  .resposta-texto {
+    padding: var(--s-4);
+  }
+
+  .fonte-texto {
+    padding: var(--s-3) var(--s-4);
+  }
+}

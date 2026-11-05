@@ -12,6 +12,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from api.db import IndiceIndisponivel
 from api.logs import request_id
 from api.services.busca import ConsultaInvalida
+from api.services.pergunta import EntendimentoIndisponivel
 
 log = logging.getLogger("api")
 
@@ -59,6 +60,11 @@ def registrar(app: FastAPI) -> None:
     async def _indice(_: Request, exc: IndiceIndisponivel) -> JSONResponse:
         log.error("indice_indisponivel", extra={"detalhe": str(exc)})
         return resposta_erro(503, "Índice de busca indisponível")
+
+    @app.exception_handler(EntendimentoIndisponivel)
+    async def _entendimento(_: Request, exc: EntendimentoIndisponivel) -> JSONResponse:
+        log.error("entendimento_indisponivel", extra={"detalhe": str(exc)})
+        return resposta_erro(503, "Entendimento das Juntas indisponível")
 
     @app.exception_handler(Exception)
     async def _inesperado(_: Request, exc: Exception) -> JSONResponse:

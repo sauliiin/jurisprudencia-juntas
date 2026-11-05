@@ -18,6 +18,20 @@ Parameters:
     Type: String
     Default: ""
     Description: E-mail para os alarmes do CloudWatch (vazio = sem alarme por e-mail).
+  LlmUrl:
+    Type: String
+    Default: https://api.groq.com/openai/v1/chat/completions
+    Description: Endpoint de chat no formato da OpenAI usado em /api/perguntar.
+  LlmModelo:
+    Type: String
+    Default: qwen/qwen3.8-27b
+    Description: Modelo do endpoint acima.
+  LlmChaveSsm:
+    Type: String
+    Default: omniailab/llm-api-key
+    Description: >-
+      Parametro SecureString do SSM com a chave do servico de IA, sem a barra inicial. Criado a mao
+      (aws ssm put-parameter); sem ele, /api/perguntar devolve so os topicos do Entendimento.
 
 Conditions:
   ComEmail: !Not [!Equals [!Ref AlertEmail, ""]]
@@ -122,6 +136,11 @@ Resources:
       DefaultRouteSettings:
         ThrottlingRateLimit: 20
         ThrottlingBurstLimit: 40
+      # Cada pergunta gasta a cota gratuita do servico de IA: limite bem menor que o da busca.
+      RouteSettings:
+        "GET /api/perguntar":
+          ThrottlingRateLimit: 1
+          ThrottlingBurstLimit: 3
 
   ApiFunction:
     Type: AWS::Serverless::Function
@@ -131,15 +150,30 @@ Resources:
       CodeUri: ../../build/lambda/
       Handler: api.lambda_handler.handler
       MemorySize: 1024
-      Timeout: 10
+      # A busca responde em milissegundos; /api/perguntar espera o modelo (ate JURIS_LLM_TIMEOUT).
+      Timeout: 20
       Environment:
         Variables:
           JURIS_INDICE: /var/task/indice_publico.db
+          JURIS_ENTENDIMENTO: /var/task/entendimento.json
           JURIS_SERVIR_SITE: "false"
           JURIS_LOG_LEVEL: INFO
+          JURIS_LLM_URL: !Ref LlmUrl
+          JURIS_LLM_MODELO: !Ref LlmModelo
+          JURIS_LLM_API_KEY_SSM: !Sub /${LlmChaveSsm}
+          JURIS_LLM_TIMEOUT: "12"
+      Policies:
+        - SSMParameterReadPolicy:
+            ParameterName: !Ref LlmChaveSsm
       LoggingConfig:
         LogGroup: !Ref ApiLogGroup
       Events:
+        Perguntar:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /api/perguntar
+            Method: GET
         Api:
           Type: HttpApi
           Properties:
