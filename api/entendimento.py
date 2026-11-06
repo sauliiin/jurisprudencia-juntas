@@ -27,9 +27,9 @@ from pathlib import Path
 from api import __version__
 
 # "ENTENDIMENTO JUNTAS 2026 - versão final.docx", compartilhado para qualquer pessoa com o link.
-DRIVE_ID = "1HPKaJqWxYVkk2dZy9_SSDUtfm_zMCuI-"
+DRIVE_ID = "1J2U-wbvOKPAI7B1Qf71587O4TV2rrf5f"
 # "VADE MECUM - edição em livro.pdf": a versão para leitura, aberta pelo link "Entendimento completo".
-PDF_ID = "1hV3234g0YfCiZEGCujkgvzwr1GcH2BKN"
+PDF_ID = "1URD5OFbTRKdcz5v1vG2dWFhcWIISbuQj"
 NOME_PADRAO = "Entendimento das Juntas"
 RAIZ = Path(__file__).resolve().parent.parent
 _DOWNLOAD = "https://drive.google.com/uc?export=download&id={}"
